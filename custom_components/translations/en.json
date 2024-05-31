@@ -1,0 +1,22 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "HiSense Smart Device",
+        "description": "Please enter your device information",
+        "data": {
+          "wifi_id": "WiFi ID (e.g., '12345d00abcde006000000070f8912g34')",
+          "device_id": "Device ID (e.g., '1ab0300c4d0000ef5gh6789')",
+          "appkey": "APP Key (e.g., '1234567890')",
+          "token": "Refresh Token (very very long)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to the device",
+      "invalid_auth": "Invalid authentication",
+      "unknown": "An unknown error occurred"
+    },
+    "title": "Hisense AC"
+  }
+}
