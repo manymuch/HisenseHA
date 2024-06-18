@@ -7,7 +7,6 @@
         "data": {
           "wifi_id": "WiFi ID (类似于：'12345d00abcde006000000070f8912g34')",
           "device_id": "Device ID (类似于'1ab0300c4d0000ef5gh6789')",
-          "appkey": "APP Key (类似于'1234567890')",
           "token": "Refresh Token (非常非常长)"
         }
       }

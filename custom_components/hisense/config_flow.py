@@ -3,7 +3,7 @@
 import voluptuous as vol
 from homeassistant import config_entries
 
-from .const import DOMAIN, CONF_WIFI_ID, CONF_DEVICE_ID, CONF_APPKEY, CONF_TOKEN
+from .const import DOMAIN, CONF_WIFI_ID, CONF_DEVICE_ID, CONF_TOKEN
 
 
 class HisenseACConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -23,13 +23,11 @@ class HisenseACConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema({
                 vol.Required(CONF_WIFI_ID): str,
                 vol.Required(CONF_DEVICE_ID, ): str,
-                vol.Required(CONF_APPKEY, ): str,
                 vol.Required(CONF_TOKEN): str,
             }),
             description_placeholders={
                 "wifi_id_hint": "WiFi ID here",
                 "device_id_hint": "Device ID here",
-                "appkey_hint": "Appkey here",
                 "token_hint": "Token here",
             },
             errors=errors,

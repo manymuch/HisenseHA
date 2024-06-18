@@ -17,7 +17,6 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
     hass.data[DOMAIN][entry.entry_id] = HiSenseApi(
         wifi_id=entry.data["wifi_id"],
         device_id=entry.data["device_id"],
-        appkey=entry.data["appkey"],
         refresh_token=entry.data["token"],
         session=session
     )

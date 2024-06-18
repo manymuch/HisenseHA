@@ -4,12 +4,11 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class HiSenseApi:
-    def __init__(self, wifi_id, device_id, appkey, refresh_token, session):
+    def __init__(self, wifi_id, device_id, refresh_token, session):
         self.wifi_id = wifi_id
         self.device_id = device_id
         self.refresh_token = refresh_token
         self.access_token = None
-        self.appkey = appkey
         self.session = session
         app_name_encoding = "%E6%B5%B7%E4%BF%A1%E6%99%BA%E6%85%A7%E5%AE%B6"
         # app_name = "海信智慧家"
@@ -145,7 +144,7 @@ class HiSenseApi:
     async def refresh(self):
         refresh_data = {
             'refreshToken': self.refresh_token,
-            'appKey': self.appkey,
+            'appKey': "1234567890",
             'format': '1',
         }
         try:
