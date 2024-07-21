@@ -1,9 +1,122 @@
 from copy import deepcopy
+import time
 import logging
 _LOGGER = logging.getLogger(__name__)
 
 
-class HiSenseApi:
+class HiSenseLogin:
+    def __init__(self, session):
+        self.session = session
+    
+    def get_timestamp(self):
+        return int(time.time() * 1000)
+
+    async def login(self, username, password):
+        timestamp = self.get_timestamp()
+        url='https://portal-account.hismarttv.com/mobile/signon'
+        headers = {
+            'Content-Type': 'application/json;charset=utf-8',
+        }
+        data = {
+            'pdateTime': '0',
+            'version': '1.0',
+            'deviceType': '2',
+            'appType': '100',
+            'versionCode': '101',
+            'adaptertRank': '3098',
+            'deviceType':'1',
+            'distributeId':'2001',
+            'loginName': username,
+            'serverCode':'9501',
+            'signature': password,
+        }
+        params = {
+            'lastUpdateTime': '0',
+            'version': '1.0',
+            'deviceType': '2',
+            'appType': '100',
+            'versionCode': '101',
+            'adaptertRank': '4130',
+            '_': str(timestamp),
+        }
+        async with self.session.post(url, headers=headers, json=data, params=params) as response:
+            result = await response.json()
+            result_code = result["data"]["resultCode"]
+            if result_code == 0:
+                access_token = result["data"]["tokenInfo"]["token"]
+                refresh_token = result["data"]["tokenInfo"]["refreshToken"]
+                return access_token, refresh_token
+            else:
+                return None
+
+    async def get_home_id_list(self, access_token):
+        timestamp = self.get_timestamp()
+        url='http://api.wg.hismarttv.com/wg/dm/getHomeList'
+        
+        headers = {
+                'Host': 'api.wg.hismarttv.com',
+                'Connection': 'Keep-Alive',
+                'Accept-Encoding': 'gzip',
+                'User-Agent': 'okhttp/4.10.0',
+            }
+        params = {
+            'sign': '',
+            'languageId': '0',
+            'version': '8.0',
+            'accessToken': access_token,   
+            'timezone':'28800',
+            'format': '1',
+            'timeStamp': str(timestamp),
+        }
+        async with self.session.get(url, headers=headers, params=params) as response:
+            result = await response.json()
+            result_code = result["response"]["resultCode"]
+            if result_code == 0:
+                home_list = result["response"]["homeList"]
+                home_id_list = []
+                for home in home_list:
+                    home_id_list.append(home["homeId"])
+                return home_id_list
+            else:
+                return None
+            
+    async def get_device_id_list(self, access_token, home_id, device_keywords="空调"):
+        timestamp = self.get_timestamp()
+        url='http://api-wg.hismarttv.com/wg/dm/getHomeDeviceList'
+        headers = {
+                'Host': 'api-wg.hismarttv.com',
+                'Connection': 'Keep-Alive',
+                'Accept-Encoding': 'gzip',
+                'User-Agent': 'okhttp/4.10.0',
+            }
+        params = {
+            'sign': '',
+            'languageId': '0',
+            'version': '8.0',
+            'accessToken': access_token,   
+            'homeId': home_id,
+            'timezone':'28800',
+            'format': '1',
+            'timeStamp': str(timestamp),
+        }
+        async with self.session.get(url, headers=headers, params=params) as response:
+            result = await response.json()
+            result_code = result["response"]["resultCode"]
+            if result_code == 0:
+                device_list = result["response"]["deviceList"]
+                device_id_list = []
+                wifi_id_list = []
+                for device in device_list:
+                    device_type_name = device["deviceTypeName"]
+                    if device_keywords in device_type_name:
+                        device_id_list.append(device["deviceId"])
+                        wifi_id_list.append(device["wifiId"])
+                return device_id_list, wifi_id_list
+            else:
+                return None
+
+
+class HiSenseAC:
     def __init__(self, wifi_id, device_id, refresh_token, session):
         self.wifi_id = wifi_id
         self.device_id = device_id

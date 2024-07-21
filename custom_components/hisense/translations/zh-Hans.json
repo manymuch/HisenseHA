@@ -5,9 +5,8 @@
         "title": "海信智能设备",
         "description": "请通过手机App抓包获得以下信息",
         "data": {
-          "wifi_id": "WiFi ID (类似于：'12345d00abcde006000000070f8912g34')",
-          "device_id": "Device ID (类似于'1ab0300c4d0000ef5gh6789')",
-          "token": "Refresh Token (非常非常长)"
+          "username": "海信APP登录用户手机号",
+          "password": "如果没有登录密码请先去海信App里设置一个"
         }
       }
     },

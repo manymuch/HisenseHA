@@ -1,9 +1,7 @@
-# config_flow.py
-
 import voluptuous as vol
 from homeassistant import config_entries
 
-from .const import DOMAIN, CONF_WIFI_ID, CONF_DEVICE_ID, CONF_TOKEN
+from .const import DOMAIN, CONF_USERNAME, CONF_PASSWORD
 
 
 class HisenseACConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -21,14 +19,13 @@ class HisenseACConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({
-                vol.Required(CONF_WIFI_ID): str,
-                vol.Required(CONF_DEVICE_ID, ): str,
-                vol.Required(CONF_TOKEN): str,
+                vol.Required(CONF_USERNAME): str,
+                vol.Required(CONF_PASSWORD, ): str,
             }),
             description_placeholders={
-                "wifi_id_hint": "WiFi ID here",
-                "device_id_hint": "Device ID here",
-                "token_hint": "Token here",
+                "username_hint": "app login username",
+                "password_hint": "app login password",
             },
             errors=errors,
         )
+    

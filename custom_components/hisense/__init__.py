@@ -1,8 +1,7 @@
 from homeassistant import config_entries, core
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-
 from .const import DOMAIN
-from .pyhisenseapi import HiSenseApi  # Import your API class
+from .pyhisenseapi import HiSenseLogin, HiSenseAC
 
 
 async def async_setup(hass: core.HomeAssistant, config: dict):
@@ -10,14 +9,26 @@ async def async_setup(hass: core.HomeAssistant, config: dict):
     hass.data[DOMAIN] = {}
     return True
 
-
 async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.ConfigEntry):
     # Setup the API client for a device
     session = async_get_clientsession(hass)
-    hass.data[DOMAIN][entry.entry_id] = HiSenseApi(
-        wifi_id=entry.data["wifi_id"],
-        device_id=entry.data["device_id"],
-        refresh_token=entry.data["token"],
+    hisense_login = HiSenseLogin(
+        session=session
+    )
+
+    access_token, refresh_token = await hisense_login.login(entry.data["username"], entry.data["password"])
+    home_id_list = await hisense_login.get_home_id_list(access_token)
+    # TODO let the user to select home_id
+    home_id = home_id_list[0]
+    device_id_list, wifi_id_list = await hisense_login.get_device_id_list(access_token, home_id)
+    # TODO let the user to select device
+    device_id = device_id_list[0]
+    wifi_id = wifi_id_list[0]
+    
+    hass.data[DOMAIN][entry.entry_id] = HiSenseAC(
+        wifi_id=wifi_id,
+        device_id=device_id,
+        refresh_token=refresh_token,
         session=session
     )
     # Forward the setup to the climate platform

@@ -5,9 +5,8 @@
         "title": "HiSense Smart Device",
         "description": "Please enter your device information",
         "data": {
-          "wifi_id": "WiFi ID (e.g., '12345d00abcde006000000070f8912g34')",
-          "device_id": "Device ID (e.g., '1ab0300c4d0000ef5gh6789')",
-          "token": "Refresh Token (very very long)"
+          "username": "App login username, could be the phone number",
+          "password": "App login password, if not available set it in the app first"
         }
       }
     },
