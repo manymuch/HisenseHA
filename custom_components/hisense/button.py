@@ -8,15 +8,19 @@ import logging
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddEntitiesCallback):
-    api = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([HisenseACUpdateButton(api)], True)
-    async_add_entities([HisenseACRefreshTokenButton(api)], True)
+
+async def async_setup_entry(hass, config_entry, async_add_entities):
+    api = hass.data[DOMAIN][config_entry.entry_id]
+    entities = [HisenseACUpdateButton(api[device_id], config_entry.entry_id) for device_id in api]
+    async_add_entities(entities, True)
+    entities = [HisenseACRefreshTokenButton(api[device_id], config_entry.entry_id) for device_id in api]
+    async_add_entities(entities, True)
 
 
 class HisenseACUpdateButton(ButtonEntity):
-    def __init__(self, api):
+    def __init__(self, api, config_entry_id):
         self._api = api
+        self._config_entry_id = config_entry_id
         self._attr_name = f"Force update button"
         self._attr_unique_id = f"{api.device_id}_force_update_button"
         self._attr_icon = "mdi:refresh"
@@ -41,16 +45,13 @@ class HisenseACUpdateButton(ButtonEntity):
         """Handle the button press."""
         _LOGGER.debug(f"Button pressed for entity: {self._attr_unique_id}")
         await self._api.check_status()
-        # Ensure the climate entity is updated after status check
-        climate_entity = self.hass.data[DOMAIN].get(self._api.device_id)
-        if climate_entity:
-            await climate_entity.async_update()
-            climate_entity.async_write_ha_state()
+        self.async_schedule_update_ha_state(True)
 
 
 class HisenseACRefreshTokenButton(ButtonEntity):
-    def __init__(self, api):
+    def __init__(self, api, config_entry_id):
         self._api = api
+        self._config_entry_id = config_entry_id
         self._attr_name = f"Refresh token"
         self._attr_unique_id = f"{api.device_id}_refresh_token"
         self._attr_icon = "mdi:refresh"

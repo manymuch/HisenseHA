@@ -3,16 +3,24 @@
     "step": {
       "user": {
         "title": "HiSense Smart Device",
-        "description": "Please enter your device information",
+        "description": "Login with App username and password",
         "data": {
           "username": "App login username, could be the phone number",
           "password": "App login password, if not available set it in the app first"
         }
+      },
+      "home": {
+        "title": "HiSense Smart Device",
+        "description": "Select your home ID"
+      },
+      "device": {
+        "title": "HiSense Smart Device",
+        "description": "Select your device(s)"
       }
     },
     "error": {
       "cannot_connect": "Unable to connect to the device",
-      "invalid_auth": "Invalid authentication",
+      "invalid_auth": "Failed to login",
       "unknown": "An unknown error occurred"
     },
     "title": "Hisense AC"

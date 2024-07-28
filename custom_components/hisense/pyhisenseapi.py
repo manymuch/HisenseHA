@@ -80,7 +80,7 @@ class HiSenseLogin:
             else:
                 return None
             
-    async def get_device_id_list(self, access_token, home_id, device_keywords="空调"):
+    async def get_device_wifi_id_dict(self, access_token, home_id, device_keywords="空调"):
         timestamp = self.get_timestamp()
         url='http://api-wg.hismarttv.com/wg/dm/getHomeDeviceList'
         headers = {
@@ -104,14 +104,12 @@ class HiSenseLogin:
             result_code = result["response"]["resultCode"]
             if result_code == 0:
                 device_list = result["response"]["deviceList"]
-                device_id_list = []
-                wifi_id_list = []
+                device_wifi_id_dict = dict()
                 for device in device_list:
                     device_type_name = device["deviceTypeName"]
                     if device_keywords in device_type_name:
-                        device_id_list.append(device["deviceId"])
-                        wifi_id_list.append(device["wifiId"])
-                return device_id_list, wifi_id_list
+                        device_wifi_id_dict[device["deviceId"]] = device["wifiId"]
+                return device_wifi_id_dict
             else:
                 return None
 

@@ -7,10 +7,12 @@ import logging
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddEntitiesCallback):
-    api = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([AcScreenSwitch(api)], True)
-    async_add_entities([AuxHeatSwitch(api)], True)
+async def async_setup_entry(hass, config_entry, async_add_entities):
+    api = hass.data[DOMAIN][config_entry.entry_id]
+    entities = [AcScreenSwitch(api[device_id]) for device_id in api]
+    async_add_entities(entities, True)
+    entities = [AuxHeatSwitch(api[device_id]) for device_id in api]
+    async_add_entities(entities, True)
 
 
 class AcScreenSwitch(SwitchEntity):
@@ -41,14 +43,14 @@ class AcScreenSwitch(SwitchEntity):
         await self._api.send_logic_command(41, 1)
         self._is_on = True
         await self.async_update()
-        self.async_write_ha_state()
+        self.async_schedule_update_ha_state(True)
 
     async def async_turn_off(self):
         _LOGGER.debug(f"Turning off screen for {self._attr_unique_id}")
         await self._api.send_logic_command(41, 0)
         self._is_on = False
         await self.async_update()
-        self.async_write_ha_state()
+        self.async_schedule_update_ha_state(True)
 
     async def async_update(self):
         status = self._api.get_status()
@@ -82,13 +84,13 @@ class AuxHeatSwitch(SwitchEntity):
         await self._api.send_logic_command(28, 1)
         self._is_on = True
         await self.async_update()
-        self.async_write_ha_state()
+        self.async_schedule_update_ha_state(True)
 
     async def async_turn_off(self):
         await self._api.send_logic_command(28, 0)
         self._is_on = False
         await self.async_update()
-        self.async_write_ha_state()
+        self.async_schedule_update_ha_state(True)
 
     async def async_update(self):
         status = self._api.get_status()

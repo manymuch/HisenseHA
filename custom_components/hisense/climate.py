@@ -20,15 +20,16 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup_entry(hass, entry, async_add_entities):
-    api = hass.data[DOMAIN][entry.entry_id]
-    entity = HisenseACClimate(api)
-    async_add_entities([entity], True)
+async def async_setup_entry(hass, config_entry, async_add_entities):
+    api = hass.data[DOMAIN][config_entry.entry_id]
+    entities = [HisenseACClimate(api[device_id], config_entry.entry_id) for device_id in api]
+    async_add_entities(entities, True)
 
 
 class HisenseACClimate(ClimateEntity):
-    def __init__(self, api):
+    def __init__(self, api, config_entry_id):
         self._api = api
+        self._config_entry_id = config_entry_id
         self._attr_name = f"Hisense AC"
         self._attr_unique_id = f"{api.device_id}_climate"
         self._attr_supported_features = (
@@ -158,7 +159,7 @@ class HisenseACClimate(ClimateEntity):
             # Update the entity's current swing mode
             self._attr_swing_mode = swing_mode
             # Notify Home Assistant that the entity's state has changed
-            self.async_write_ha_state()
+            self.async_schedule_update_ha_state(True)
         else:
             _LOGGER.error("Unsupported swing mode: %s", swing_mode)
 

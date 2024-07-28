@@ -3,16 +3,24 @@
     "step": {
       "user": {
         "title": "海信智能设备",
-        "description": "请通过手机App抓包获得以下信息",
+        "description": "使用海信智慧家的手机号和密码登录",
         "data": {
-          "username": "海信APP登录用户手机号",
-          "password": "如果没有登录密码请先去海信App里设置一个"
+          "username": "海信智慧家登录用户手机号",
+          "password": "如果没有登录密码请先去海信智慧家App里设置一个"
         }
+      },
+      "home": {
+        "title": "海信智能设备",
+        "description": "选择海信App中的家庭ID(单选)"
+      },
+      "device": {
+        "title": "海信智能设备",
+        "description": "选择需要添加的设备(可多选)"
       }
     },
     "error": {
       "cannot_connect": "无法连接到设备",
-      "invalid_auth": "认证无效",
+      "invalid_auth": "登录失败",
       "unknown": "发生未知错误"
     },
     "title": "海信空调"
