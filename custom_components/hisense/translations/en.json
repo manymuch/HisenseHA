@@ -75,23 +75,29 @@
       }
     },
     "sensor": {
-      "refrigerator_temp": {
-        "name": "Refrigerator Temperature"
+      "refrigerator_set_temperature": {
+        "name": "Refrigerator Set Temperature"
       },
-      "freeze_temp": {
-        "name": "Freezer Temperature"
+      "freeze_set_temperature": {
+        "name": "Freezer Set Temperature"
       },
-      "variation_temp": {
-        "name": "Variable Zone Temperature"
+      "refrigerator_real_temperature": {
+        "name": "Refrigerator Real Temperature"
       },
-      "ambient_temp": {
-        "name": "Ambient Temperature"
+      "freeze_real_temperature": {
+        "name": "Freezer Real Temperature"
+      },
+      "variation_real_temperature": {
+        "name": "Variation Real Temperature"
       },
       "work_mode": {
         "name": "Work Mode"
       },
       "variation_mode": {
-        "name": "Variable Zone Mode"
+        "name": "variation_mode"
+      },
+      "ambient_temperature": {
+        "name": "Ambient Temperature"
       }
     },
     "select": {

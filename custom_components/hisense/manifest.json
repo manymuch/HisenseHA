@@ -2,7 +2,7 @@
   "domain": "hisense",
   "name": "Hisense Smart Devices",
   "config_flow": true,
-  "version": "1.6.0",
+  "version": "1.6.1",
   "integration_type": "device",
   "documentation": "https://github.com/manymuch/HisenseHA",
   "requirements": [],

@@ -75,23 +75,29 @@
       }
     },
     "sensor": {
-      "refrigerator_temp": {
-        "name": "冷藏室温度"
+      "refrigerator_set_temperature": {
+        "name": "冷藏室设置温度"
       },
-      "freeze_temp": {
-        "name": "冷冻室温度"
+      "freeze_set_temperature": {
+        "name": "冷冻室设置温度"
       },
-      "variation_temp": {
-        "name": "变温室温度"
+      "refrigerator_real_temperature": {
+        "name": "冷藏室实际温度"
       },
-      "ambient_temp": {
-        "name": "环境温度"
+      "freeze_real_temperature": {
+        "name": "冷冻室实际温度"
+      },
+      "variation_real_temperature": {
+        "name": "变温室实际温度"
       },
       "work_mode": {
         "name": "工作模式"
       },
       "variation_mode": {
         "name": "变温空间模式"
+      },
+      "ambient_temperature": {
+        "name": "环境温度"
       }
     },
     "select": {

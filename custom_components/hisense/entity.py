@@ -27,11 +27,11 @@ class HisenseEntity(CoordinatorEntity[HisenseDataUpdateCoordinator]):
         """Initialize the entity."""
         super().__init__(coordinator)
         
-        entity_name = getattr(coordinator.client, "entity_name", coordinator.client.device_id)
-        slugified_entity_name = slugify(entity_name)
+        device_id = coordinator.client.device_id
+        slugified_device_id = slugify(device_id)
         
-        self._attr_unique_id = f"{coordinator.client.device_id}_{unique_suffix}"
-        self._attr_suggested_object_id = f"{slugified_entity_name}_{object_suffix}"
+        self._attr_unique_id = f"{unique_suffix}_{slugified_device_id}"
+        self._attr_suggested_object_id = f"{object_suffix}_{slugified_device_id}"
         
         if icon:
             self._attr_icon = icon
@@ -64,4 +64,6 @@ class HisenseEntity(CoordinatorEntity[HisenseDataUpdateCoordinator]):
             "name": name,
             "translation_key": translation_key,
             "manufacturer": "Hisense",
+            "model": device_name,
+            "serial_number": self.client.device_id,
         }

@@ -15,4 +15,4 @@ def device_suggested_object_id(device_id: str, suffix: str) -> str:
     """Suggested entity object_id segment: slugified device id + role (for new entities)."""
     from homeassistant.util import slugify
 
-    return f"{slugify(device_id)}_{suffix}"
+    return f"{suffix}_{slugify(device_id)}"

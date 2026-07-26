@@ -6,38 +6,48 @@ from .entity import HisenseEntity
 
 FRIDGE_SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
     SensorEntityDescription(
-        key="refrigerator_temperature",
-        translation_key="refrigerator_temp",
+        key="refrigerator_set_temperature",
+        translation_key="refrigerator_set_temperature",
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         icon="mdi:thermometer",
     ),
     SensorEntityDescription(
-        key="freeze_temperature",
-        translation_key="freeze_temp",
+        key="freeze_set_temperature",
+        translation_key="freeze_set_temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        icon="mdi:snowflake-thermometer",
+    ),
+    SensorEntityDescription(
+        key="refrigerator_real_temperature",
+        translation_key="refrigerator_real_temperature",
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         icon="mdi:thermometer",
     ),
     SensorEntityDescription(
-        key="variation_temperature",
-        translation_key="variation_temp",
+        key="freeze_real_temperature",
+        translation_key="freeze_real_temperature",
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
-        icon="mdi:thermometer",
+        icon="mdi:snowflake-thermometer",
     ),
     SensorEntityDescription(
-        key="variation_mode",
-        translation_key="variation_mode",
-        icon="mdi:format-list-bulleted",
-        entity_registry_enabled_default=False,
+        key="variation_real_temperature",
+        translation_key="variation_real_temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        icon="mdi:thermometer",
     ),
     SensorEntityDescription(
         key="work_mode",
         translation_key="work_mode",
         icon="mdi:format-list-bulleted",
-        entity_registry_enabled_default=False,
+    ),
+    SensorEntityDescription(
+        key="variation_mode",
+        translation_key="variation_mode",
+        icon="mdi:format-list-bulleted",
     ),
     SensorEntityDescription(
         key="ambient_temperature",
-        translation_key="ambient_temp",
+        translation_key="ambient_temperature",
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         icon="mdi:thermometer",
     ),
@@ -72,8 +82,6 @@ class HisenseFridgeSensor(HisenseEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        if self.entity_description.key in ("work_mode", "variation_mode"):
-            return False
         return True
 
     @property

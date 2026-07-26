@@ -6,7 +6,7 @@ _LOGGER = logging.getLogger(__name__)
 
 _STATUS_SWING_MODES = {0, 1, 2, 3}
 _MIN_STATUS_VALUES = 210
-_MIN_FRIDGE_STATUS_VALUES = 12
+_MIN_FRIDGE_STATUS_VALUES = 130
 
 
 def _device_type_from_name(device_type_name) -> str | None:
@@ -542,24 +542,24 @@ class HiSenseFridge:
             "power_on": False,
             "refrigerator_set_temperature": 5,
             "freeze_set_temperature": -18,
-            "variation_set_temperature": -40,
             "refrigerator_real_temperature": 5,
             "freeze_real_temperature": -18,
             "variation_real_temperature": 0,
             "ambient_temperature": 25,
             "work_mode_id": 0,
+            "work_mode": "自定义",
             "variation_mode_id": 0,
+            "variation_mode": "NORMAL",
         }
         self.work_mode_lookup = {
-            0: "NORMAL",
-            64: "SMART",
-            65: "QUICK_COOLING",
+            0: "自定义",
+            64: "智能",
+            65: "速冷",
         }
         self.variation_mode_lookup = {
-            -2: "ZERO_C_FRESH",
-            -1: "ORIGINAL_FRESH",
-            0: "NORMAL",
-            2: "ZERO_C_FRESH",
+            16: "原鲜",
+            32: "0℃养鲜",
+            64: "母婴",
         }
 
     async def _send_command(self, url, command_data, status_required=True):
@@ -647,15 +647,17 @@ class HiSenseFridge:
                 )
 
             work_mode_id = result_list[3]
-            variation_mode_id = result_list[11]
+            variation_mode_id = result_list[130] if len(result_list) > 130 else 0
 
             status = {
-                "refrigerator_temperature": result_list[0],
-                "freeze_temperature": result_list[1],
-                "variation_temperature": result_list[11],
+                "refrigerator_set_temperature": result_list[0],
+                "freeze_set_temperature": result_list[1],
                 "work_mode_id": work_mode_id,
-                "work_mode": self.work_mode_lookup.get(work_mode_id, "NORMAL"),
+                "work_mode": self.work_mode_lookup.get(work_mode_id, "自定义"),
                 "power_on": result_list[4] == 1,
+                "refrigerator_real_temperature": result_list[6],
+                "freeze_real_temperature": result_list[7],
+                "variation_real_temperature": result_list[8],
                 "ambient_temperature": result_list[9],
                 "variation_mode_id": variation_mode_id,
                 "variation_mode": self.variation_mode_lookup.get(variation_mode_id, "NORMAL"),
@@ -704,6 +706,22 @@ class HiSenseFridge:
 
     async def set_work_mode(self, mode_id: int):
         return await self.send_logic_command(3, mode_id)
+
+    async def set_fridge_mode(self, mode_id: int):
+        if mode_id == 64:
+            return await self.send_logic_command(19, 1)
+        if mode_id == 65:
+            return await self.send_logic_command(25, 1)
+        return False
+
+    async def set_variation_mode(self, mode_id: int):
+        if mode_id == 64:
+            return await self.send_logic_command(33, 1)
+        if mode_id == 32:
+            return await self.send_logic_command(34, 1)
+        if mode_id == 16:
+            return await self.send_logic_command(35, 1)
+        return False
 
     async def check_status(self):
         if await self._robust_send_command(self.check_url, self.check_data_template):
