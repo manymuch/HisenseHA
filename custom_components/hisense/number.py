@@ -156,13 +156,15 @@ class HisenseFridgeTemperatureNumber(HisenseEntity, NumberEntity):
         if self.entity_description.key == "refrigerator_temp_control":
             success = await self.client.set_refrigerator_temperature(v)
             label = "refrigerator"
-            self.coordinator.data["refrigerator_set_temperature"] = v
+            data_key = "refrigerator_set_temperature"
         else:
             success = await self.client.set_freeze_temperature(v)
             label = "freezer"
-            self.coordinator.data["freeze_set_temperature"] = v
+            data_key = "freeze_set_temperature"
         if not success:
             raise HomeAssistantError(f"Failed to set Hisense {label} temperature")
+
+        self.coordinator.data[data_key] = v
         
         work_mode = self.status.get("work_mode", "自定义")
         if work_mode == "智能" or work_mode == "速冷":

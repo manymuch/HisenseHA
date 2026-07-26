@@ -61,10 +61,10 @@
       }
     },
     "number": {
-      "climate_min_temperature": {
+      "climate_min_temp": {
         "name": "最低温度"
       },
-      "climate_max_temperature": {
+      "climate_max_temp": {
         "name": "最高温度"
       },
       "refrigerator_temp_control": {

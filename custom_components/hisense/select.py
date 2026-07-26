@@ -80,8 +80,10 @@ class HisenseFridgeModeSelect(HisenseEntity, SelectEntity):
             mode_id = WORK_MODE_MAP.get(option)
             if mode_id is None:
                 raise HomeAssistantError(f"无效的工作模式选项: {option}")
-            await self.coordinator.client.set_fridge_mode(mode_id)
-            
+            success = await self.coordinator.client.set_fridge_mode(mode_id)
+            if not success:
+                raise HomeAssistantError("Failed to set Hisense refrigerator work mode")
+
             self.coordinator.data["work_mode"] = option
             self.coordinator.data["work_mode_id"] = mode_id
             
@@ -95,8 +97,12 @@ class HisenseFridgeModeSelect(HisenseEntity, SelectEntity):
             mode_id = VARIATION_MODE_MAP.get(option)
             if mode_id is None:
                 raise HomeAssistantError(f"无效的变温模式选项: {option}")
-            await self.coordinator.client.set_variation_mode(mode_id)
-            
+            success = await self.coordinator.client.set_variation_mode(mode_id)
+            if not success:
+                raise HomeAssistantError(
+                    "Failed to set Hisense refrigerator variation mode"
+                )
+
             self.coordinator.data["variation_mode"] = option
             self.coordinator.data["variation_mode_id"] = mode_id
         
