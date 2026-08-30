@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import DOMAIN
-from .pyhisenseapi import HiSenseAC, HiSenseFridge
+from .pyhisenseapi import HiSenseAC, HiSenseFridge, HiSenseWasher
 
 import logging
 
@@ -23,7 +23,7 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def __init__(
         self,
         hass: HomeAssistant,
-        client: HiSenseAC | HiSenseFridge,
+        client: HiSenseAC | HiSenseFridge | HiSenseWasher,
         device_type: str = "空调"
     ) -> None:
         """Initialize the coordinator."""

@@ -33,6 +33,9 @@
     },
     "hisense_fridge": {
       "name": "海信冰箱"
+    },
+    "hisense_washer": {
+      "name": "海信洗衣机"
     }
   },
   "entity": {
@@ -77,6 +80,50 @@
       },
       "run_time": {
         "name": "今日运行时间"
+      },
+      "washer_protocol_debug": {
+        "name": "洗衣机协议状态"
+      },
+      "washer_run_state": {
+        "name": "运行状态"
+      },
+      "washer_phase": {
+        "name": "洗衣阶段"
+      },
+      "washer_program": {
+        "name": "程序代码"
+      },
+      "washer_remaining_time": {
+        "name": "剩余时间"
+      },
+      "washer_fault": {
+        "name": "故障代码"
+      },
+      "washer_motor_speed": {
+        "name": "当前转速"
+      },
+      "washer_temperature_raw": {
+        "name": "温度原始值"
+      },
+      "washer_configured_spin": {
+        "name": "设定转速"
+      },
+      "washer_configured_temperature": {
+        "name": "设定温度"
+      },
+      "washer_dry_setting": {
+        "name": "烘干设定"
+      }
+    },
+    "binary_sensor": {
+      "washer_power": {
+        "name": "电源"
+      },
+      "washer_gate_lock": {
+        "name": "门锁"
+      },
+      "washer_child_lock": {
+        "name": "童锁"
       }
     }
   }

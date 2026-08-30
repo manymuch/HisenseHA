@@ -14,6 +14,42 @@ _PORTAL_APP_KEY = "commonweb"
 _PORTAL_APP_SECRET = "MORZRbkuiWxjp+SM4vR_GxY4pZxLZ6rn"
 _PORTAL_AES_IV = _PORTAL_APP_SECRET[:16].encode("ascii")
 
+WASHER_PHASE_LABELS = {
+    0: "待机",
+    1: "预约等待",
+    2: "浸泡",
+    3: "预洗",
+    4: "主洗",
+    5: "漂洗",
+    6: "脱水",
+    7: "洗涤完成",
+    8: "烘干",
+    9: "风干",
+    10: "晾护",
+}
+_WASHER_MIN_STATUS_VALUES = 101
+_WASHER_TEMPERATURE_LABELS = {
+    0: "常温",
+    2: "20 °C",
+    3: "30 °C",
+    4: "40 °C",
+    6: "60 °C",
+    9: "95 °C",
+}
+_WASHER_DRY_SETTING_LABELS = {
+    0: "关闭",
+    1: "即穿",
+    2: "熨烫",
+    3: "存放",
+    4: "定时烘 1 挡",
+    5: "定时烘 2 挡",
+    6: "定时烘 3 挡",
+    7: "定时烘 4 挡",
+    8: "定时烘 5 挡",
+    9: "定时烘 6 挡",
+}
+
+
 class HiSenseLogin:
     def __init__(self, session):
         self.session = session
@@ -167,22 +203,65 @@ class HiSenseLogin:
         )
 
 
-def _device_type(device: dict) -> str | None:
-    product = device.get("product") or {}
-    text = " ".join(
-        str(value or "")
-        for value in (
-            device.get("categoryCode"),
-            device.get("deviceTypeName"),
-            product.get("name"),
-            product.get("code"),
-        )
-    ).lower()
+def _device_type_from_name(device_type_name) -> str | None:
+    if not isinstance(device_type_name, str):
+        return None
+    text = device_type_name.lower()
     if "aircondition" in text or "air_condition" in text or "空调" in text:
         return "空调"
     if "refrigerat" in text or "fridge" in text or "冰箱" in text:
         return "冰箱"
+    if "washer" in text or "washing" in text or "洗衣" in text:
+        return "洗衣机"
     return None
+
+
+def _device_text(value) -> str:
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _is_supported_00f_washer(device: dict) -> bool:
+    """Return whether a washer belongs to the verified 00f/E3S family."""
+    product = device.get("product") or {}
+    protocol_types = {
+        _device_text(device.get(key)).lower()
+        for key in ("deviceType", "deviceTypeCode", "typeCode")
+        if _device_text(device.get(key))
+    }
+    model = " ".join(
+        filter(
+            None,
+            (
+                _device_text(device.get("deviceCode")),
+                _device_text(device.get("deviceName")),
+                _device_text(product.get("code")),
+                _device_text(product.get("name")),
+            ),
+        )
+    ).upper()
+    return "00f" in protocol_types or "E3S" in model
+
+
+def _device_type(device: dict) -> str | None:
+    product = device.get("product") or {}
+    device_type = _device_type_from_name(
+        " ".join(
+            str(value or "")
+            for value in (
+                device.get("categoryCode"),
+                device.get("deviceTypeName"),
+                product.get("name"),
+                product.get("code"),
+            )
+        )
+    )
+    if device_type == "洗衣机" and not _is_supported_00f_washer(device):
+        _LOGGER.warning(
+            "Skipping unsupported Hisense washer model; only verified "
+            "00f/E3S devices are enabled"
+        )
+        return None
+    return device_type
 
 
 def _as_int(value):
@@ -663,6 +742,173 @@ class _HiSenseDevice:
             {key: value for key, value in values.items() if value is not None}
         )
         return self.get_status()
+
+
+class HiSenseWasher(_HiSenseDevice):
+    """Read-only AIHome client for verified Hisense 00f/E3S washers."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.status = {
+            "protocol_payload_length": 0,
+            "protocol_payload_sha256": "",
+            "protocol_raw_values": [],
+            "protocol_changed_indices": [],
+            "protocol_nonzero_values": {},
+        }
+
+    @classmethod
+    def _status_success(cls, result) -> bool:
+        if cls._success(result):
+            return True
+        if not isinstance(result, dict):
+            return False
+        payload = result.get("payload")
+        if isinstance(payload, dict) and "status" in payload:
+            return False
+        response = result.get("response")
+        return isinstance(response, dict) and isinstance(
+            response.get("deviceStatusList"), list
+        )
+
+    @classmethod
+    def _extract_status_values(cls, result) -> list[int]:
+        if not isinstance(result, dict):
+            raise ValueError("missing response object")
+
+        payload = result.get("payload") or {}
+        raw_status = payload.get("deviceStatus") if isinstance(payload, dict) else None
+        if raw_status is None:
+            response = result.get("response") or {}
+            status_list = (
+                response.get("deviceStatusList")
+                if isinstance(response, dict)
+                else None
+            )
+            if isinstance(status_list, list) and status_list:
+                first_status = status_list[0]
+                if isinstance(first_status, dict):
+                    raw_status = first_status.get("deviceStatus")
+
+        if isinstance(raw_status, str):
+            values = [int(value.strip()) for value in raw_status.split(",")]
+        elif isinstance(raw_status, list):
+            values = [int(value) for value in raw_status]
+        else:
+            raise ValueError("missing deviceStatus")
+
+        if len(values) < _WASHER_MIN_STATUS_VALUES:
+            raise ValueError(
+                f"washer status has {len(values)} values; expected at least "
+                f"{_WASHER_MIN_STATUS_VALUES}"
+            )
+        return values
+
+    def _update_status_from_result(self, result) -> bool:
+        try:
+            values = self._extract_status_values(result)
+        except (TypeError, ValueError):
+            _LOGGER.error("Failed to parse Hisense washer status", exc_info=True)
+            return False
+
+        previous = self.status.get("protocol_raw_values", [])
+        changed = (
+            [
+                index
+                for index in range(max(len(previous), len(values)))
+                if (previous[index] if index < len(previous) else None)
+                != (values[index] if index < len(values) else None)
+            ]
+            if previous
+            else []
+        )
+        canonical = ",".join(str(value) for value in values)
+        phase = values[11]
+        power_on = values[9] == 1
+        run_state = values[8]
+        if not power_on:
+            machine_state = "关机"
+        elif phase == 7:
+            machine_state = "完成"
+        elif run_state == 1:
+            machine_state = "运行"
+        elif run_state == 0 and phase == 0:
+            machine_state = "待机"
+        elif run_state == 0:
+            machine_state = "暂停"
+        else:
+            machine_state = f"未知 ({run_state})"
+
+        self.status = {
+            "machine_state": machine_state,
+            "run_state": run_state,
+            "power_on": power_on,
+            "phase": phase,
+            "phase_label": WASHER_PHASE_LABELS.get(phase, f"未知 ({phase})"),
+            "program": values[12],
+            "remaining_minutes": values[28] * 256 + values[29],
+            "gate_locked": values[6] == 1,
+            "fault": values[27],
+            "motor_speed": values[13] * 256 + values[14],
+            "temperature_raw": values[15],
+            "configured_spin": values[37] * 100,
+            "configured_temperature": _WASHER_TEMPERATURE_LABELS.get(
+                values[38], f"未知 ({values[38]})"
+            ),
+            "child_lock": values[100] == 1,
+            "dry_setting": _WASHER_DRY_SETTING_LABELS.get(
+                values[80], f"未知 ({values[80]})"
+            ),
+            "protocol_payload_length": len(values),
+            "protocol_payload_sha256": hashlib.sha256(
+                canonical.encode()
+            ).hexdigest(),
+            "protocol_raw_values": values,
+            "protocol_changed_indices": changed,
+            "protocol_nonzero_values": {
+                str(index): value
+                for index, value in enumerate(values)
+                if value != 0
+            },
+        }
+        _LOGGER.debug(
+            "Hisense washer status: length=%s sha256=%s changed_indices=%s",
+            len(values),
+            self.status["protocol_payload_sha256"],
+            changed,
+        )
+        return True
+
+    async def check_status(self):
+        if not await self.refresh():
+            return None
+        try:
+            result = await self._post(
+                self.session,
+                self.access_token,
+                self.customer_id,
+                "/4.0/iot/devices/detail",
+                {"deviceId": str(self.device_id), "partnerId": str(self.partner_id)},
+            )
+        except Exception:
+            _LOGGER.error("Hisense AIHome washer status request failed", exc_info=True)
+            return None
+        if not self._status_success(result) or not self._update_status_from_result(
+            result
+        ):
+            return None
+        return self.get_status()
+
+    async def _send_aihome_action(self, command, params, *, source_name=None):
+        """Keep washer support read-only even if an inherited method is called."""
+        return False
+
+    async def _send_aihome_label(self, label_key: str, label_value) -> bool:
+        """Keep washer support read-only even if an inherited method is called."""
+        return False
+
+    def get_status(self):
+        return json.loads(json.dumps(self.status))
 
 
 class HiSenseAC(_HiSenseDevice):
