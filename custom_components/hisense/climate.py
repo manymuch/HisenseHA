@@ -226,6 +226,7 @@ class HisenseACClimate(HisenseEntity, ClimateEntity):
         raise HomeAssistantError("Failed to turn on Hisense AC")
 
     async def async_turn_off(self):
-        raise HomeAssistantError(
-            "Hisense AC power-off is unavailable until the AIHome command is verified"
-        )
+        if await self.client.turn_off():
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to turn off Hisense AC")

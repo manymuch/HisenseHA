@@ -797,9 +797,11 @@ class HiSenseAC(_HiSenseDevice):
         )
 
     async def turn_off(self):
-        # The captured Off request returned SUCCESS but did not change the
-        # device state, so leave this operation unavailable until verified.
-        return False
+        return await self._control(
+            "connector.device.command.Power",
+            {"onAndOff": {"code": "Off"}},
+            source_name=self.POWER_SOURCE_NAME,
+        )
 
     async def set_temperature(self, temperature):
         return await self._control(
