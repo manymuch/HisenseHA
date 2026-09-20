@@ -216,32 +216,6 @@ def _device_type_from_name(device_type_name) -> str | None:
     return None
 
 
-def _device_text(value) -> str:
-    return value.strip() if isinstance(value, str) else ""
-
-
-def _is_supported_00f_washer(device: dict) -> bool:
-    """Return whether a washer belongs to the verified 00f/E3S family."""
-    product = device.get("product") or {}
-    protocol_types = {
-        _device_text(device.get(key)).lower()
-        for key in ("deviceType", "deviceTypeCode", "typeCode")
-        if _device_text(device.get(key))
-    }
-    model = " ".join(
-        filter(
-            None,
-            (
-                _device_text(device.get("deviceCode")),
-                _device_text(device.get("deviceName")),
-                _device_text(product.get("code")),
-                _device_text(product.get("name")),
-            ),
-        )
-    ).upper()
-    return "00f" in protocol_types or "E3S" in model
-
-
 def _device_type(device: dict) -> str | None:
     product = device.get("product") or {}
     device_type = _device_type_from_name(
@@ -255,12 +229,6 @@ def _device_type(device: dict) -> str | None:
             )
         )
     )
-    if device_type == "洗衣机" and not _is_supported_00f_washer(device):
-        _LOGGER.warning(
-            "Skipping unsupported Hisense washer model; only verified "
-            "00f/E3S devices are enabled"
-        )
-        return None
     return device_type
 
 
@@ -745,7 +713,7 @@ class _HiSenseDevice:
 
 
 class HiSenseWasher(_HiSenseDevice):
-    """Read-only AIHome client for verified Hisense 00f/E3S washers."""
+    """Read-only AIHome client for Hisense washers."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
