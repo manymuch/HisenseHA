@@ -4,13 +4,13 @@
 
 [简体中文](README_zh-Hans.md)
 
-Home Assistant custom integration for **Hisense** cloud-connected smart devices. Air conditioners use the **AIHome** API. Refrigerators are discovered as a read-only placeholder until their AIHome command mappings are captured. If you want support for more device types, **pull requests** are welcome.
+Home Assistant custom integration for **Hisense** smart devices. It uses cloud APIs and currently supports air conditioners and washing machines.
 
 ## Requirements
 
 - **Home Assistant** 2025.6 or newer (for older cores, see [releases](https://github.com/manymuch/HisenseHA/releases)).
 - A **Hisense account** that can sign in to the official mobile app (same username and password).
-- The AC or refrigerator must already be paired in the app and belong to a **home**.
+- The AC, refrigerator, or supported washer must already be paired in the app and belong to a **home**.
 
 ## Install the integration
 
@@ -39,12 +39,8 @@ Click the button above, or manually:
 1. Go to **Settings** → **Devices & services** → **Add integration**.
 2. Search for **Hisense Smart Devices** (or **Hisense**) and select it.
 3. Enter your **Hisense app username and password** (wrong credentials will show an authentication error).
-4. Choose the **home** that contains your AC or refrigerator.
+4. Choose the **home** that contains your device.
 5. Select one or more **devices**, then finish the wizard.
-
-Refrigerator controls and sensors are currently kept disabled until their AIHome mappings are validated.
-
-The AC exposes the verified AIHome controls for power-on, temperature, mode, fan speed, automatic wind, screen, auxiliary heat, natural wind, and horizontal full-swing control. Fast cooling/heating is exposed as a separate switch. Power-off is intentionally unavailable until a command is confirmed to change the device state. AC energy sensors report today's energy and runtime from the AIHome `todayenergy` endpoint.
 
 ## Status sync
 

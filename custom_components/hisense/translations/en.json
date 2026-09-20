@@ -33,6 +33,9 @@
     },
     "hisense_fridge": {
       "name": "Hisense Fridge"
+    },
+    "hisense_washer": {
+      "name": "Hisense Washer"
     }
   },
   "entity": {
@@ -77,6 +80,90 @@
       },
       "run_time": {
         "name": "Today's runtime"
+      },
+      "washer_protocol_debug": {
+        "name": "Washer Protocol State"
+      },
+      "washer_run_state": {
+        "name": "Run state",
+        "state": {
+          "off": "Off",
+          "complete": "Complete",
+          "running": "Running",
+          "standby": "Standby",
+          "paused": "Paused"
+        }
+      },
+      "washer_phase": {
+        "name": "Cycle phase",
+        "state": {
+          "standby": "Standby",
+          "reservation_wait": "Reservation wait",
+          "soaking": "Soaking",
+          "prewash": "Prewash",
+          "main_wash": "Main wash",
+          "rinse": "Rinse",
+          "spin": "Spin",
+          "complete": "Complete",
+          "drying": "Drying",
+          "air_dry": "Air dry",
+          "fresh_care": "Fresh care"
+        }
+      },
+      "washer_program": {
+        "name": "Program code"
+      },
+      "washer_remaining_time": {
+        "name": "Remaining time"
+      },
+      "washer_fault": {
+        "name": "Fault code"
+      },
+      "washer_motor_speed": {
+        "name": "Motor speed"
+      },
+      "washer_temperature_raw": {
+        "name": "Temperature raw value"
+      },
+      "washer_configured_spin": {
+        "name": "Configured spin"
+      },
+      "washer_configured_temperature": {
+        "name": "Configured temperature",
+        "state": {
+          "ambient": "Ambient",
+          "temperature_20_c": "20 °C",
+          "temperature_30_c": "30 °C",
+          "temperature_40_c": "40 °C",
+          "temperature_60_c": "60 °C",
+          "temperature_95_c": "95 °C"
+        }
+      },
+      "washer_dry_setting": {
+        "name": "Dry setting",
+        "state": {
+          "off": "Off",
+          "ready_to_wear": "Ready to wear",
+          "ironing": "Ironing",
+          "storage": "Storage",
+          "timed_dry_level_1": "Timed dry level 1",
+          "timed_dry_level_2": "Timed dry level 2",
+          "timed_dry_level_3": "Timed dry level 3",
+          "timed_dry_level_4": "Timed dry level 4",
+          "timed_dry_level_5": "Timed dry level 5",
+          "timed_dry_level_6": "Timed dry level 6"
+        }
+      }
+    },
+    "binary_sensor": {
+      "washer_power": {
+        "name": "Power"
+      },
+      "washer_gate_lock": {
+        "name": "Door lock"
+      },
+      "washer_child_lock": {
+        "name": "Child lock"
       }
     }
   }
