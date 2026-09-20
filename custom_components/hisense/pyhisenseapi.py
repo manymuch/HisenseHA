@@ -15,38 +15,38 @@ _PORTAL_APP_SECRET = "MORZRbkuiWxjp+SM4vR_GxY4pZxLZ6rn"
 _PORTAL_AES_IV = _PORTAL_APP_SECRET[:16].encode("ascii")
 
 WASHER_PHASE_LABELS = {
-    0: "待机",
-    1: "预约等待",
-    2: "浸泡",
-    3: "预洗",
-    4: "主洗",
-    5: "漂洗",
-    6: "脱水",
-    7: "洗涤完成",
-    8: "烘干",
-    9: "风干",
-    10: "晾护",
+    0: "standby",
+    1: "reservation_wait",
+    2: "soaking",
+    3: "prewash",
+    4: "main_wash",
+    5: "rinse",
+    6: "spin",
+    7: "complete",
+    8: "drying",
+    9: "air_dry",
+    10: "fresh_care",
 }
 _WASHER_MIN_STATUS_VALUES = 101
 _WASHER_TEMPERATURE_LABELS = {
-    0: "常温",
-    2: "20 °C",
-    3: "30 °C",
-    4: "40 °C",
-    6: "60 °C",
-    9: "95 °C",
+    0: "ambient",
+    2: "temperature_20_c",
+    3: "temperature_30_c",
+    4: "temperature_40_c",
+    6: "temperature_60_c",
+    9: "temperature_95_c",
 }
 _WASHER_DRY_SETTING_LABELS = {
-    0: "关闭",
-    1: "即穿",
-    2: "熨烫",
-    3: "存放",
-    4: "定时烘 1 挡",
-    5: "定时烘 2 挡",
-    6: "定时烘 3 挡",
-    7: "定时烘 4 挡",
-    8: "定时烘 5 挡",
-    9: "定时烘 6 挡",
+    0: "off",
+    1: "ready_to_wear",
+    2: "ironing",
+    3: "storage",
+    4: "timed_dry_level_1",
+    5: "timed_dry_level_2",
+    6: "timed_dry_level_3",
+    7: "timed_dry_level_4",
+    8: "timed_dry_level_5",
+    9: "timed_dry_level_6",
 }
 
 
@@ -827,24 +827,24 @@ class HiSenseWasher(_HiSenseDevice):
         power_on = values[9] == 1
         run_state = values[8]
         if not power_on:
-            machine_state = "关机"
+            machine_state = "off"
         elif phase == 7:
-            machine_state = "完成"
+            machine_state = "complete"
         elif run_state == 1:
-            machine_state = "运行"
+            machine_state = "running"
         elif run_state == 0 and phase == 0:
-            machine_state = "待机"
+            machine_state = "standby"
         elif run_state == 0:
-            machine_state = "暂停"
+            machine_state = "paused"
         else:
-            machine_state = f"未知 ({run_state})"
+            machine_state = f"unknown_{run_state}"
 
         self.status = {
             "machine_state": machine_state,
             "run_state": run_state,
             "power_on": power_on,
             "phase": phase,
-            "phase_label": WASHER_PHASE_LABELS.get(phase, f"未知 ({phase})"),
+            "phase_label": WASHER_PHASE_LABELS.get(phase, f"unknown_{phase}"),
             "program": values[12],
             "remaining_minutes": values[28] * 256 + values[29],
             "gate_locked": values[6] == 1,
@@ -853,11 +853,11 @@ class HiSenseWasher(_HiSenseDevice):
             "temperature_raw": values[15],
             "configured_spin": values[37] * 100,
             "configured_temperature": _WASHER_TEMPERATURE_LABELS.get(
-                values[38], f"未知 ({values[38]})"
+                values[38], f"unknown_{values[38]}"
             ),
             "child_lock": values[100] == 1,
             "dry_setting": _WASHER_DRY_SETTING_LABELS.get(
-                values[80], f"未知 ({values[80]})"
+                values[80], f"unknown_{values[80]}"
             ),
             "protocol_payload_length": len(values),
             "protocol_payload_sha256": hashlib.sha256(

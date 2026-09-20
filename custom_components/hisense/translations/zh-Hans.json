@@ -85,10 +85,30 @@
         "name": "洗衣机协议状态"
       },
       "washer_run_state": {
-        "name": "运行状态"
+        "name": "运行状态",
+        "state": {
+          "off": "关机",
+          "complete": "完成",
+          "running": "运行",
+          "standby": "待机",
+          "paused": "暂停"
+        }
       },
       "washer_phase": {
-        "name": "洗衣阶段"
+        "name": "洗衣阶段",
+        "state": {
+          "standby": "待机",
+          "reservation_wait": "预约等待",
+          "soaking": "浸泡",
+          "prewash": "预洗",
+          "main_wash": "主洗",
+          "rinse": "漂洗",
+          "spin": "脱水",
+          "complete": "洗涤完成",
+          "drying": "烘干",
+          "air_dry": "风干",
+          "fresh_care": "晾护"
+        }
       },
       "washer_program": {
         "name": "程序代码"
@@ -109,10 +129,30 @@
         "name": "设定转速"
       },
       "washer_configured_temperature": {
-        "name": "设定温度"
+        "name": "设定温度",
+        "state": {
+          "ambient": "常温",
+          "temperature_20_c": "20 °C",
+          "temperature_30_c": "30 °C",
+          "temperature_40_c": "40 °C",
+          "temperature_60_c": "60 °C",
+          "temperature_95_c": "95 °C"
+        }
       },
       "washer_dry_setting": {
-        "name": "烘干设定"
+        "name": "烘干设定",
+        "state": {
+          "off": "关闭",
+          "ready_to_wear": "即穿",
+          "ironing": "熨烫",
+          "storage": "存放",
+          "timed_dry_level_1": "定时烘 1 挡",
+          "timed_dry_level_2": "定时烘 2 挡",
+          "timed_dry_level_3": "定时烘 3 挡",
+          "timed_dry_level_4": "定时烘 4 挡",
+          "timed_dry_level_5": "定时烘 5 挡",
+          "timed_dry_level_6": "定时烘 6 挡"
+        }
       }
     },
     "binary_sensor": {
