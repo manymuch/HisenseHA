@@ -16,6 +16,14 @@
       "device": {
         "title": "HiSense Smart Device",
         "description": "Select your device(s)"
+      },
+      "reauth_confirm": {
+        "title": "Sign in to Hisense AIHome again",
+        "description": "Enter your AIHome username and password to restore the devices.",
+        "data": {
+          "username": "AIHome username",
+          "password": "AIHome password"
+        }
       }
     },
     "error": {
@@ -23,6 +31,7 @@
       "invalid_auth": "Failed to login",
       "no_devices": "No supported Hisense devices were found",
       "no_homes": "No homes were found for this account",
+      "wrong_account": "This account does not contain the configured devices",
       "unknown": "An unknown error occurred"
     },
     "title": "Hisense Smart Device"

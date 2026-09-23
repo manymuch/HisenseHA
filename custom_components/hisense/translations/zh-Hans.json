@@ -16,6 +16,14 @@
       "device": {
         "title": "海信智能设备",
         "description": "选择需要添加的设备（可多选）"
+      },
+      "reauth_confirm": {
+        "title": "重新登录海信爱家",
+        "description": "请输入海信爱家账号和密码，以恢复设备连接。",
+        "data": {
+          "username": "海信爱家登录用户手机号",
+          "password": "海信爱家登录密码"
+        }
       }
     },
     "error": {
@@ -23,6 +31,7 @@
       "invalid_auth": "登录失败",
       "no_devices": "没有找到支持的海信设备",
       "no_homes": "此账号下没有找到家庭",
+      "wrong_account": "此账号下找不到已配置的设备",
       "unknown": "发生未知错误"
     },
     "title": "海信智能设备"

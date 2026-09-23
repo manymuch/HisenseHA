@@ -1,5 +1,6 @@
-from collections import Counter
+import asyncio
 import base64
+from collections import Counter
 import hashlib
 import json
 import logging
@@ -374,6 +375,7 @@ class _HiSenseDevice:
     def _success(body: dict) -> bool:
         return (
             isinstance(body, dict)
+            and body.get("httpCode") not in (401, 403)
             and (body.get("payload") or {}).get("status") == "SUCCESS"
         )
 
@@ -409,7 +411,10 @@ class _HiSenseDevice:
             headers=cls._headers(body),
             data=body,
         ) as response:
-            return await response.json()
+            result = await response.json()
+            if getattr(response, "status", None) in (401, 403) and isinstance(result, dict):
+                return {**result, "httpCode": response.status}
+            return result
 
     @classmethod
     async def _post_parameters(cls, session, path: str, parameters: dict) -> dict:
@@ -461,6 +466,10 @@ class _HiSenseDevice:
         access_token=None,
         customer_id="",
         partner_id="1001",
+        username="",
+        password="",
+        on_token_refresh=None,
+        token_lock=None,
     ):
         self.wifi_id = wifi_id
         self.device_id = device_id
@@ -469,83 +478,163 @@ class _HiSenseDevice:
         self.access_token = access_token
         self.customer_id = str(customer_id or "")
         self.partner_id = str(partner_id or "1001")
+        self.username = username
+        self.password = password
         self.session = session
         self.device_name = device_name
         self.entity_name = entity_name
         self.status = {}
         self._pending_status = {}
+        self._on_token_refresh = on_token_refresh
+        self.on_auth_failure = None
+        self._token_lock = token_lock or asyncio.Lock()
 
-    async def refresh(self):
-        return bool(self.access_token and self.customer_id and self.partner_id)
+    def _notify_auth_failure(self) -> None:
+        """Start status recovery after an authenticated control is rejected."""
+        if self.on_auth_failure:
+            self.on_auth_failure()
+
+    async def refresh(self, *, force=False, previous_token=None):
+        """Sign in through the AIHome account service when needed."""
+        if self.access_token and not force:
+            return True
+        if not self.username or not self.password:
+            return False
+        async with self._token_lock:
+            if previous_token is not None and self.access_token != previous_token:
+                return True
+            try:
+                tokens = await HiSenseLogin(self.session).login(
+                    self.username, self.password
+                )
+            except Exception:
+                _LOGGER.warning("Hisense AIHome sign-in request failed", exc_info=True)
+                return False
+            if not tokens:
+                _LOGGER.warning("Hisense AIHome sign-in was rejected")
+                return False
+            self.access_token, self.refresh_token, self.customer_id = tokens
+            if self._on_token_refresh:
+                self._on_token_refresh(
+                    self.access_token, self.refresh_token, self.customer_id
+                )
+            return True
+
+    @staticmethod
+    def _auth_failure(body) -> bool:
+        if not isinstance(body, dict):
+            return False
+        payload = body.get("payload") if isinstance(body.get("payload"), dict) else {}
+        response = body.get("response") if isinstance(body.get("response"), dict) else {}
+        fields = (body, payload, response)
+        codes = {
+            str(node[key]).lower()
+            for node in fields
+            for key in ("errorCode", "resultCode", "httpCode")
+            if node.get(key) is not None
+        }
+        if codes & {"401", "403"}:
+            return True
+        reason = " ".join(
+            str(node.get(key, ""))
+            for node in fields
+            for key in ("status", "errorCode", "errorDesc", "message", "desc")
+        ).lower()
+        return any(
+            word in reason
+            for word in ("token", "unauthoriz", "authentication", "登录过期", "令牌", "鉴权")
+        )
 
     async def _send_aihome_action(self, command, params, *, source_name=None):
         if not await self.refresh():
             return False
         action = self._action(command, params)
-        try:
-            result = await self._post(
-                self.session,
-                self.access_token,
-                self.customer_id,
-                "/4.0/iot/devices/execute",
-                [action],
-                execute=True,
-                device_id=self.device_id,
-                partner_id=self.partner_id,
-                source_name=source_name,
-            )
-        except Exception:
-            _LOGGER.error("Hisense AIHome control request failed", exc_info=True)
-            return False
-        if not self._success(result):
+        for attempt in range(2):
+            request_token = self.access_token
+            try:
+                result = await self._post(
+                    self.session, request_token, self.customer_id,
+                    "/4.0/iot/devices/execute", [action], execute=True,
+                    device_id=self.device_id, partner_id=self.partner_id,
+                    source_name=source_name,
+                )
+            except Exception:
+                _LOGGER.error("Hisense AIHome control request failed", exc_info=True)
+                return False
+            if self._success(result):
+                return True
+            if (
+                attempt == 0
+                and self._auth_failure(result)
+                and await self.refresh(force=True, previous_token=request_token)
+            ):
+                continue
+            if self._auth_failure(result):
+                self._notify_auth_failure()
             _LOGGER.warning(
                 "Hisense AIHome control failed: %s",
                 self._response_summary(result),
             )
             return False
-        return True
+        return False
 
     async def _send_aihome_label(self, label_key: str, label_value) -> bool:
         if not await self.refresh():
             return False
-        body = self._label_request_body(
-            self.access_token,
-            self.device_id,
-            self.partner_id,
-            label_key,
-            label_value,
-        )
-        try:
-            result = await self._post_raw(
-                self.session,
-                self.LABEL_BATCH_SAVE_PATH,
-                body,
+        for attempt in range(2):
+            request_token = self.access_token
+            body = self._label_request_body(
+                request_token, self.device_id, self.partner_id,
+                label_key, label_value,
             )
-        except Exception:
-            _LOGGER.error("Hisense AIHome label request failed", exc_info=True)
-            return False
-        if not self._success(result) and not self._label_success(result):
+            try:
+                result = await self._post_raw(
+                    self.session, self.LABEL_BATCH_SAVE_PATH, body,
+                )
+            except Exception:
+                _LOGGER.error("Hisense AIHome label request failed", exc_info=True)
+                return False
+            if self._success(result) or self._label_success(result):
+                return True
+            if (
+                attempt == 0
+                and self._auth_failure(result)
+                and await self.refresh(force=True, previous_token=request_token)
+            ):
+                continue
+            if self._auth_failure(result):
+                self._notify_auth_failure()
             _LOGGER.warning(
                 "Hisense AIHome label update failed: %s",
                 self._response_summary(result),
             )
             return False
-        return True
+        return False
 
-    @staticmethod
-    def _response_summary(body: dict) -> dict:
+    def _response_summary(self, body) -> dict:
         """Return a safe failure summary without tokens or signatures."""
         if not isinstance(body, dict):
             return {"response_type": type(body).__name__}
         payload = body.get("payload")
         if not isinstance(payload, dict):
             payload = {}
-        error_desc = payload.get("errorDesc")
-        if isinstance(error_desc, str):
-            error_desc = error_desc[:300]
+        response = body.get("response")
+        if not isinstance(response, dict):
+            response = {}
+        error_desc = payload.get("errorDesc") or response.get("desc") or body.get("desc")
+        if error_desc is not None:
+            error_desc = str(error_desc)[:300]
+            for secret in (self.access_token, self.refresh_token):
+                if secret:
+                    error_desc = error_desc.replace(str(secret), "[redacted]")
         return {
             "status": payload.get("status"),
-            "errorCode": payload.get("errorCode"),
+            "httpCode": body.get("httpCode"),
+            "errorCode": (
+                payload.get("errorCode")
+                or response.get("resultCode")
+                or body.get("resultCode")
+            ),
             "errorDesc": error_desc,
         }
 
@@ -564,9 +653,7 @@ class _HiSenseDevice:
             return None
         try:
             result = await self._post(
-                self.session,
-                self.access_token,
-                self.customer_id,
+                self.session, self.access_token, self.customer_id,
                 "/4.0/iot/devices/detail",
                 {"deviceId": str(self.device_id), "partnerId": str(self.partner_id)},
             )
@@ -574,6 +661,7 @@ class _HiSenseDevice:
             _LOGGER.error("Hisense AIHome status request failed", exc_info=True)
             return None
         if not self._success(result):
+            _LOGGER.warning("Hisense AIHome status failed: %s", self._response_summary(result))
             return None
         payload = result.get("payload") or {}
         device = payload.get("device") or {}
@@ -731,6 +819,8 @@ class HiSenseWasher(_HiSenseDevice):
             return True
         if not isinstance(result, dict):
             return False
+        if result.get("httpCode") in (401, 403):
+            return False
         payload = result.get("payload")
         if isinstance(payload, dict) and "status" in payload:
             return False
@@ -852,18 +942,17 @@ class HiSenseWasher(_HiSenseDevice):
             return None
         try:
             result = await self._post(
-                self.session,
-                self.access_token,
-                self.customer_id,
+                self.session, self.access_token, self.customer_id,
                 "/4.0/iot/devices/detail",
                 {"deviceId": str(self.device_id), "partnerId": str(self.partner_id)},
             )
         except Exception:
             _LOGGER.error("Hisense AIHome washer status request failed", exc_info=True)
             return None
-        if not self._status_success(result) or not self._update_status_from_result(
-            result
-        ):
+        if not self._status_success(result):
+            _LOGGER.warning("Hisense AIHome washer status failed: %s", self._response_summary(result))
+            return None
+        if not self._update_status_from_result(result):
             return None
         return self.get_status()
 

@@ -1,7 +1,9 @@
+import asyncio
+
 from homeassistant import config_entries, core
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import DOMAIN
+from .const import CONF_PASSWORD, CONF_USERNAME, DOMAIN
 from .coordinator import HisenseDataUpdateCoordinator
 from .pyhisenseapi import HiSenseAC, HiSenseFridge, HiSenseWasher
 
@@ -10,6 +12,32 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {}
     session = async_get_clientsession(hass)
+    clients = []
+    coordinators = []
+    token_lock = asyncio.Lock()
+
+    def save_tokens(access_token, refresh_token, customer_id):
+        """Keep every device and the config entry on the same token pair."""
+        for client in clients:
+            client.access_token = access_token
+            client.refresh_token = refresh_token
+            client.customer_id = customer_id
+        devices = [
+            {
+                **device,
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "customer_id": customer_id,
+            }
+            for device in entry.data["devices"]
+        ]
+        hass.config_entries.async_update_entry(entry, data={**entry.data, "devices": devices})
+
+    username = entry.data.get(CONF_USERNAME, "")
+    password = entry.data.get(CONF_PASSWORD, "")
+    if not username or not password:
+        entry.async_start_reauth(hass)
+
     for device_info in entry.data["devices"]:
         device_id = device_info["device_id"]
         wifi_id = device_info["wifi_id"]
@@ -42,6 +70,10 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
                 access_token=access_token,
                 customer_id=customer_id,
                 partner_id=partner_id,
+                username=username,
+                password=password,
+                on_token_refresh=save_tokens,
+                token_lock=token_lock,
             )
         elif device_type == "冰箱":
             client = HiSenseFridge(
@@ -55,6 +87,10 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
                 access_token=access_token,
                 customer_id=customer_id,
                 partner_id=partner_id,
+                username=username,
+                password=password,
+                on_token_refresh=save_tokens,
+                token_lock=token_lock,
             )
         else:
             client = HiSenseAC(
@@ -68,11 +104,20 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
                 access_token=access_token,
                 customer_id=customer_id,
                 partner_id=partner_id,
+                username=username,
+                password=password,
+                on_token_refresh=save_tokens,
+                token_lock=token_lock,
             )
 
-        coordinator = HisenseDataUpdateCoordinator(hass, client, device_type)
-        await coordinator.async_config_entry_first_refresh()
+        clients.append(client)
+        coordinator = HisenseDataUpdateCoordinator(hass, client, device_type, entry)
+        client.on_auth_failure = coordinator.async_start_refresh
+        coordinators.append((device_id, coordinator))
+
+    for device_id, coordinator in coordinators:
         hass.data[DOMAIN][entry.entry_id][device_id] = coordinator
+        coordinator.async_start_refresh()
 
     platforms = [
         "climate",
@@ -99,5 +144,7 @@ async def async_unload_entry(hass: core.HomeAssistant, entry: config_entries.Con
     ]
     unload_ok = await hass.config_entries.async_unload_platforms(entry, platforms)
     if unload_ok:
+        for coordinator in hass.data[DOMAIN].get(entry.entry_id, {}).values():
+            await coordinator.async_cancel_refresh()
         hass.data[DOMAIN].pop(entry.entry_id, None)
     return unload_ok

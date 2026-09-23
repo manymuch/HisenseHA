@@ -1,6 +1,5 @@
 from homeassistant.components.button import ButtonEntity
 from homeassistant.const import EntityCategory
-from homeassistant.exceptions import HomeAssistantError
 
 from .const import DOMAIN
 from .entity import HisenseEntity
@@ -24,9 +23,12 @@ class HisenseACUpdateButton(HisenseEntity, ButtonEntity):
         self._attr_icon = "mdi:refresh"
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
+    @property
+    def available(self) -> bool:
+        """Keep manual recovery accessible while the device is unavailable."""
+        return True
+
     async def async_press(self):
         """Handle the button press."""
         _LOGGER.debug(f"Button pressed for entity: {self._attr_unique_id}")
-        await self.coordinator.async_request_refresh()
-        if not self.coordinator.last_update_success:
-            raise HomeAssistantError("Failed to refresh Hisense AC status")
+        self.coordinator.async_start_refresh()

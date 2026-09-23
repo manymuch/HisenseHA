@@ -44,7 +44,7 @@ Click the button above, or manually:
 
 ## Status sync
 
-This integration talks to the **Hisense AIHome cloud**. Device state is read during setup and after entity actions; it does **not** continuously poll full device state on a fixed interval in the background.
+This integration talks to the **Hisense AIHome cloud**. Device state is read during setup, after entity actions, and when you press **Force refresh**. There is no periodic polling. 
 
 Each device exposes one **Diagnostic** button, **Force refresh**, which requests the current state once from the Hisense AIHome cloud. Each press causes a real cloud request; do not automate it as frequent polling.
 
