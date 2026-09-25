@@ -6,7 +6,7 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import EntityCategory, UnitOfEnergy, UnitOfTime
+from homeassistant.const import EntityCategory, UnitOfEnergy, UnitOfTemperature, UnitOfTime
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
@@ -87,6 +87,30 @@ WASHER_SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
     ),
 )
 
+FRIDGE_SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
+    SensorEntityDescription(
+        key="refrigerator_temperature",
+        translation_key="fridge_refrigerator_temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        icon="mdi:fridge-top",
+    ),
+    SensorEntityDescription(
+        key="freezer_temperature",
+        translation_key="fridge_freezer_temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        icon="mdi:snowflake-thermometer",
+    ),
+    SensorEntityDescription(
+        key="ambient_temperature",
+        translation_key="fridge_ambient_temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        icon="mdi:thermometer",
+    ),
+)
+
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     coordinators = hass.data[DOMAIN][config_entry.entry_id]
@@ -98,6 +122,15 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         for desc in AC_ENERGY_SENSOR_DESCRIPTIONS
     ]
     async_add_entities(sensors)
+
+    fridge_coordinators = [
+        c for c in coordinators.values() if c.device_type == "冰箱"
+    ]
+    async_add_entities(
+        HisenseFridgeSensor(coordinator, description)
+        for coordinator in fridge_coordinators
+        for description in FRIDGE_SENSOR_DESCRIPTIONS
+    )
 
     washer_coordinators = [
         coordinator
@@ -113,6 +146,18 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         HisenseWasherProtocolSensor(coordinator)
         for coordinator in washer_coordinators
     )
+
+
+class HisenseFridgeSensor(HisenseEntity, SensorEntity):
+    entity_description: SensorEntityDescription
+
+    def __init__(self, coordinator, description: SensorEntityDescription):
+        super().__init__(coordinator, description.key, description.key, description.icon)
+        self.entity_description = description
+
+    @property
+    def native_value(self):
+        return self.status.get(self.entity_description.key)
 
 
 class HisenseWasherSensor(HisenseEntity, SensorEntity):

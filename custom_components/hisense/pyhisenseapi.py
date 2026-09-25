@@ -1174,7 +1174,65 @@ class HiSenseAC(_HiSenseDevice):
 
 
 class HiSenseFridge(_HiSenseDevice):
-    """AIHome placeholder until a real refrigerator capture is available."""
+    """Read refrigerator temperatures when AIHome exposes a status array."""
+
+    async def check_status(self):
+        if not await self.refresh():
+            return None
+        try:
+            result = await self._post(
+                self.session, self.access_token, self.customer_id,
+                "/4.0/iot/devices/detail",
+                {"deviceId": str(self.device_id), "partnerId": str(self.partner_id)},
+            )
+        except Exception:
+            _LOGGER.error("Hisense AIHome fridge status request failed", exc_info=True)
+            return None
+        if not self._success(result):
+            _LOGGER.warning(
+                "Hisense AIHome fridge status failed: %s",
+                self._response_summary(result),
+            )
+            return None
+
+        payload = result.get("payload") or {}
+        device = payload.get("device") or {}
+        states = device.get("states") or payload.get("states") or {}
+        if not isinstance(states, dict):
+            states = {}
+        self._update_from_states(states)
+
+        # Issue #14 documents these positions for a legacy status array. Only
+        # interpret them when the AIHome detail response carries that same array.
+        raw = next(
+            (
+                node.get("deviceStatus")
+                for node in (states, device, payload)
+                if isinstance(node, dict) and node.get("deviceStatus") is not None
+            ),
+            None,
+        )
+        if isinstance(raw, str):
+            parts = raw.split(",")
+        elif isinstance(raw, list):
+            parts = raw
+        else:
+            parts = []
+        if len(parts) > 9:
+            try:
+                values = [int(str(parts[index]).strip()) for index in (0, 1, 9)]
+            except (TypeError, ValueError):
+                _LOGGER.warning("Hisense AIHome fridge status array has invalid temperatures")
+            else:
+                if 1 <= values[0] <= 10 and -25 <= values[1] <= -15:
+                    self.status.update(
+                        refrigerator_temperature=values[0],
+                        freezer_temperature=values[1],
+                        ambient_temperature=values[2],
+                    )
+                else:
+                    _LOGGER.warning("Hisense AIHome fridge status array is outside known ranges")
+        return self.get_status() if self.status else None
 
     unsupported_features = frozenset(
         {

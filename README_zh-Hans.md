@@ -4,7 +4,7 @@
 [English](README.md)
 
 
-面向 **海信（Hisense）** 智能设备的 Home Assistant 自定义集成，使用云端api接口，目前支持空调和洗衣机  
+面向 **海信（Hisense）** 智能设备的 Home Assistant 自定义集成，使用云端 API，目前支持空调、洗衣机和冰箱。
 
 
 

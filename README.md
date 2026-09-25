@@ -4,7 +4,7 @@
 
 [简体中文](README_zh-Hans.md)
 
-Home Assistant custom integration for **Hisense** smart devices. It uses cloud APIs and currently supports air conditioners and washing machines.
+Home Assistant custom integration for **Hisense** smart devices. It uses cloud APIs and currently supports air conditioners, washing machines, refrigerators.
 
 ## Requirements
 

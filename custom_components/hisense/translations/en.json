@@ -84,6 +84,15 @@
       }
     },
     "sensor": {
+      "fridge_refrigerator_temperature": {
+        "name": "Refrigerator temperature"
+      },
+      "fridge_freezer_temperature": {
+        "name": "Freezer temperature"
+      },
+      "fridge_ambient_temperature": {
+        "name": "Ambient temperature"
+      },
       "today_energy": {
         "name": "Today's energy"
       },

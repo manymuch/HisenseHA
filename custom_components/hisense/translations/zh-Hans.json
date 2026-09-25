@@ -84,6 +84,15 @@
       }
     },
     "sensor": {
+      "fridge_refrigerator_temperature": {
+        "name": "冷藏室温度"
+      },
+      "fridge_freezer_temperature": {
+        "name": "冷冻室温度"
+      },
+      "fridge_ambient_temperature": {
+        "name": "环境温度"
+      },
       "today_energy": {
         "name": "今日耗电量"
       },
