@@ -5,7 +5,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import CONF_PASSWORD, CONF_USERNAME, DOMAIN
 from .coordinator import HisenseDataUpdateCoordinator
-from .pyhisenseapi import HiSenseAC, HiSenseFridge, HiSenseWasher
+from .pyhisenseapi import HiSenseAC, HiSenseDryer, HiSenseFridge, HiSenseWasher
 
 
 async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.ConfigEntry):
@@ -60,6 +60,23 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
 
         if device_type == "洗衣机":
             client = HiSenseWasher(
+                wifi_id=wifi_id,
+                device_id=device_id,
+                refresh_token=refresh_token,
+                session=session,
+                device_name=friendly_name,
+                entity_name=entity_name,
+                home_id=home_id,
+                access_token=access_token,
+                customer_id=customer_id,
+                partner_id=partner_id,
+                username=username,
+                password=password,
+                on_token_refresh=save_tokens,
+                token_lock=token_lock,
+            )
+        elif device_type == "干衣机":
+            client = HiSenseDryer(
                 wifi_id=wifi_id,
                 device_id=device_id,
                 refresh_token=refresh_token,

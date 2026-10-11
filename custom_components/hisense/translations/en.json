@@ -45,6 +45,9 @@
     },
     "hisense_washer": {
       "name": "Hisense Washer"
+    },
+    "hisense_dryer": {
+      "name": "Hisense Dryer"
     }
   },
   "entity": {
@@ -171,6 +174,34 @@
           "timed_dry_level_5": "Timed dry level 5",
           "timed_dry_level_6": "Timed dry level 6"
         }
+      },
+      "dryer_run_state": {
+        "name": "Run state",
+        "state": {
+          "off": "Off",
+          "complete": "Complete",
+          "running": "Running",
+          "standby": "Standby",
+          "paused": "Paused"
+        }
+      },
+      "dryer_program": {
+        "name": "Program code"
+      },
+      "dryer_remaining_time": {
+        "name": "Remaining time"
+      },
+      "dryer_dry_level": {
+        "name": "Dry level"
+      },
+      "dryer_dry_temperature": {
+        "name": "Dry temperature"
+      },
+      "dryer_drying_method": {
+        "name": "Drying method"
+      },
+      "dryer_fault": {
+        "name": "Fault code"
       }
     },
     "binary_sensor": {
@@ -181,6 +212,15 @@
         "name": "Door lock"
       },
       "washer_child_lock": {
+        "name": "Child lock"
+      },
+      "dryer_power": {
+        "name": "Power"
+      },
+      "dryer_gate_lock": {
+        "name": "Door lock"
+      },
+      "dryer_child_lock": {
         "name": "Child lock"
       }
     }

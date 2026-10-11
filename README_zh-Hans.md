@@ -4,7 +4,7 @@
 [English](README.md)
 
 
-面向 **海信（Hisense）** 智能设备的 Home Assistant 自定义集成，使用云端 API，目前支持空调、洗衣机和冰箱。
+面向 **海信（Hisense）** 智能设备的 Home Assistant 自定义集成，使用云端 API，目前支持空调、洗衣机、干衣机和冰箱。
 
 
 
@@ -12,7 +12,7 @@
 
 - **Home Assistant** 2025.6 或更高版本（若使用更旧的核心，请查看[发行说明](https://github.com/manymuch/HisenseHA/releases)）。
 - 能在官方手机 **海信爱家 App** 中正常登录的海信账号（用户名与密码一致）。
-- 空调、冰箱或受支持的洗衣机需已在 App 中完成配网，并归属到某个 **家庭**。
+- 空调、冰箱、受支持的洗衣机或干衣机需已在 App 中完成配网，并归属到某个 **家庭**。
 
 ## 安装集成
 

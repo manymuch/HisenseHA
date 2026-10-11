@@ -9,7 +9,7 @@ from homeassistant.util import slugify
 
 from .const import DOMAIN
 from .coordinator import HisenseDataUpdateCoordinator
-from .pyhisenseapi import HiSenseAC, HiSenseFridge, HiSenseWasher
+from .pyhisenseapi import HiSenseAC, HiSenseDryer, HiSenseFridge, HiSenseWasher
 
 
 class HisenseEntity(CoordinatorEntity[HisenseDataUpdateCoordinator]):
@@ -37,7 +37,7 @@ class HisenseEntity(CoordinatorEntity[HisenseDataUpdateCoordinator]):
             self._attr_icon = icon
 
     @property
-    def client(self) -> HiSenseAC | HiSenseFridge | HiSenseWasher:
+    def client(self) -> HiSenseAC | HiSenseDryer | HiSenseFridge | HiSenseWasher:
         """Return the device API client."""
         return self.coordinator.client
 
@@ -58,6 +58,9 @@ class HisenseEntity(CoordinatorEntity[HisenseDataUpdateCoordinator]):
         elif device_type == "洗衣机":
             translation_key = "hisense_washer"
             name = device_name if device_name else "Hisense Washer"
+        elif device_type == "干衣机":
+            translation_key = "hisense_dryer"
+            name = device_name if device_name else "Hisense Dryer"
         else:
             translation_key = "hisense_ac"
             name = device_name if device_name else "Hisense AC"

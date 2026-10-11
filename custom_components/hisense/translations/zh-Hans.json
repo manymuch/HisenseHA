@@ -45,6 +45,9 @@
     },
     "hisense_washer": {
       "name": "海信洗衣机"
+    },
+    "hisense_dryer": {
+      "name": "海信干衣机"
     }
   },
   "entity": {
@@ -171,6 +174,34 @@
           "timed_dry_level_5": "定时烘 5 挡",
           "timed_dry_level_6": "定时烘 6 挡"
         }
+      },
+      "dryer_run_state": {
+        "name": "运行状态",
+        "state": {
+          "off": "关机",
+          "complete": "完成",
+          "running": "运行",
+          "standby": "待机",
+          "paused": "暂停"
+        }
+      },
+      "dryer_program": {
+        "name": "程序代码"
+      },
+      "dryer_remaining_time": {
+        "name": "剩余时间"
+      },
+      "dryer_dry_level": {
+        "name": "干衣程度"
+      },
+      "dryer_dry_temperature": {
+        "name": "烘干温度"
+      },
+      "dryer_drying_method": {
+        "name": "烘干方式"
+      },
+      "dryer_fault": {
+        "name": "故障代码"
       }
     },
     "binary_sensor": {
@@ -181,6 +212,15 @@
         "name": "门锁"
       },
       "washer_child_lock": {
+        "name": "童锁"
+      },
+      "dryer_power": {
+        "name": "电源"
+      },
+      "dryer_gate_lock": {
+        "name": "门锁"
+      },
+      "dryer_child_lock": {
         "name": "童锁"
       }
     }

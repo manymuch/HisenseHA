@@ -4,13 +4,13 @@
 
 [简体中文](README_zh-Hans.md)
 
-Home Assistant custom integration for **Hisense** smart devices. It uses cloud APIs and currently supports air conditioners, washing machines, refrigerators.
+Home Assistant custom integration for **Hisense** smart devices. It uses cloud APIs and currently supports air conditioners, washing machines, dryers, refrigerators.
 
 ## Requirements
 
 - **Home Assistant** 2025.6 or newer (for older cores, see [releases](https://github.com/manymuch/HisenseHA/releases)).
 - A **Hisense account** that can sign in to the official mobile app (same username and password).
-- The AC, refrigerator, or supported washer must already be paired in the app and belong to a **home**.
+- The AC, refrigerator, or supported washer/dryer must already be paired in the app and belong to a **home**.
 
 ## Install the integration
 

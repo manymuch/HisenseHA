@@ -87,6 +87,45 @@ WASHER_SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
     ),
 )
 
+DRYER_SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
+    SensorEntityDescription(
+        key="machine_state",
+        translation_key="dryer_run_state",
+        icon="mdi:tumble-dryer",
+    ),
+    SensorEntityDescription(
+        key="program",
+        translation_key="dryer_program",
+        icon="mdi:format-list-numbered",
+    ),
+    SensorEntityDescription(
+        key="remaining_minutes",
+        translation_key="dryer_remaining_time",
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        icon="mdi:timer-outline",
+    ),
+    SensorEntityDescription(
+        key="dry_level",
+        translation_key="dryer_dry_level",
+        icon="mdi:water-minus-outline",
+    ),
+    SensorEntityDescription(
+        key="dry_temperature",
+        translation_key="dryer_dry_temperature",
+        icon="mdi:thermometer",
+    ),
+    SensorEntityDescription(
+        key="drying_method",
+        translation_key="dryer_drying_method",
+        icon="mdi:fan",
+    ),
+    SensorEntityDescription(
+        key="fault",
+        translation_key="dryer_fault",
+        icon="mdi:alert-circle-outline",
+    ),
+)
+
 FRIDGE_SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
     SensorEntityDescription(
         key="refrigerator_temperature",
@@ -147,8 +186,31 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         for coordinator in washer_coordinators
     )
 
+    dryer_coordinators = [
+        coordinator
+        for coordinator in coordinators.values()
+        if coordinator.device_type == "干衣机"
+    ]
+    async_add_entities(
+        HisenseDryerSensor(coordinator, description)
+        for coordinator in dryer_coordinators
+        for description in DRYER_SENSOR_DESCRIPTIONS
+    )
+
 
 class HisenseFridgeSensor(HisenseEntity, SensorEntity):
+    entity_description: SensorEntityDescription
+
+    def __init__(self, coordinator, description: SensorEntityDescription):
+        super().__init__(coordinator, description.key, description.key, description.icon)
+        self.entity_description = description
+
+    @property
+    def native_value(self):
+        return self.status.get(self.entity_description.key)
+
+
+class HisenseDryerSensor(HisenseEntity, SensorEntity):
     entity_description: SensorEntityDescription
 
     def __init__(self, coordinator, description: SensorEntityDescription):

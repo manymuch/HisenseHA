@@ -49,6 +49,9 @@ _WASHER_DRY_SETTING_LABELS = {
     8: "timed_dry_level_5",
     9: "timed_dry_level_6",
 }
+# The named-states format reports the actual wash temperature in degrees
+# Celsius instead of the numbered index used by the legacy array format.
+_WASHER_STATES_TEMPERATURE_VALUES = (20, 30, 40, 60, 95)
 
 
 class HiSenseLogin:
@@ -214,6 +217,8 @@ def _device_type_from_name(device_type_name) -> str | None:
         return "冰箱"
     if "washer" in text or "washing" in text or "洗衣" in text:
         return "洗衣机"
+    if "dryer" in text or "干衣" in text or "烘干" in text:
+        return "干衣机"
     return None
 
 
@@ -648,6 +653,38 @@ class _HiSenseDevice:
         payload = body.get("payload") or {}
         return payload.get("resultCode") in (0, "0")
 
+    @staticmethod
+    def _detail_states(result):
+        """Return the named states map from a device detail response."""
+        if not isinstance(result, dict):
+            return None
+        payload = result.get("payload")
+        payload = payload if isinstance(payload, dict) else {}
+        device = payload.get("device")
+        device = device if isinstance(device, dict) else {}
+        states = device.get("states") or payload.get("states")
+        return states if isinstance(states, dict) and states else None
+
+    def _store_states(self, updates: dict, states: dict) -> None:
+        """Store parsed state updates and refresh the protocol debug fields."""
+        canonical = ",".join(f"{key}={states[key]}" for key in sorted(states))
+        self.status.update(updates)
+        self.status.update(
+            {
+                "protocol_payload_length": len(states),
+                "protocol_payload_sha256": hashlib.sha256(
+                    canonical.encode()
+                ).hexdigest(),
+                "protocol_raw_values": [],
+                "protocol_changed_indices": [],
+                "protocol_nonzero_values": {
+                    key: value
+                    for key, value in states.items()
+                    if value not in ("0", "--", "")
+                },
+            }
+        )
+
     async def check_status(self):
         if not await self.refresh():
             return None
@@ -937,6 +974,67 @@ class HiSenseWasher(_HiSenseDevice):
         )
         return True
 
+    def _update_from_states(self, states: dict):
+        """Parse the named AIHome states map reported by newer washers."""
+
+        def _flag(key):
+            value = states.get(key)
+            if value is None or value == "--":
+                return None
+            return _as_bool(value)
+
+        power_on = _flag("powerStatus")
+        run_state = _as_int(states.get("runStatus"))
+        paused = _flag("startPauseStatus")
+        if power_on is None:
+            machine_state = None
+        elif not power_on:
+            machine_state = "off"
+        elif paused:
+            machine_state = "paused"
+        elif run_state == 1:
+            machine_state = "running"
+        elif run_state == 0:
+            machine_state = "standby"
+        else:
+            machine_state = f"unknown_{run_state}"
+
+        temperature = _as_int(states.get("washTemperature"))
+        dry_value = _as_int(states.get("dry"))
+        door = states.get("doorLockStatus")
+        updates = {
+            "machine_state": machine_state,
+            "run_state": run_state,
+            "power_on": power_on,
+            "program": _as_int(states.get("workMode")),
+            "remaining_minutes": _as_int(states.get("remainRunTime")),
+            "fault": _as_int(states.get("fault")),
+            "motor_speed": _as_int(states.get("rotarySpeed")),
+            "temperature_raw": temperature,
+            "configured_spin": _as_int(states.get("dehydrationSpeed")),
+            "configured_temperature": (
+                (
+                    "ambient"
+                    if temperature == 0
+                    else f"temperature_{temperature}_c"
+                    if temperature in _WASHER_STATES_TEMPERATURE_VALUES
+                    else f"unknown_{temperature}"
+                )
+                if temperature is not None
+                else None
+            ),
+            "dry_setting": (
+                _WASHER_DRY_SETTING_LABELS.get(dry_value, f"unknown_{dry_value}")
+                if dry_value is not None
+                else None
+            ),
+            "gate_locked": None if door in (None, "--") else str(door) == "1",
+            "child_lock": _flag("childLock"),
+        }
+        updates = {key: value for key, value in updates.items() if value is not None}
+        self._store_states(updates, states)
+        return set(updates)
+
     async def check_status(self):
         if not await self.refresh():
             return None
@@ -949,6 +1047,10 @@ class HiSenseWasher(_HiSenseDevice):
         except Exception:
             _LOGGER.error("Hisense AIHome washer status request failed", exc_info=True)
             return None
+        states = self._detail_states(result)
+        if states is not None:
+            self._update_from_states(states)
+            return self.get_status()
         if not self._status_success(result):
             _LOGGER.warning("Hisense AIHome washer status failed: %s", self._response_summary(result))
             return None
@@ -962,6 +1064,75 @@ class HiSenseWasher(_HiSenseDevice):
 
     async def _send_aihome_label(self, label_key: str, label_value) -> bool:
         """Keep washer support read-only even if an inherited method is called."""
+        return False
+
+    def get_status(self):
+        return json.loads(json.dumps(self.status))
+
+
+class HiSenseDryer(_HiSenseDevice):
+    """Read-only AIHome client for Hisense dryers."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.status = {
+            "protocol_payload_length": 0,
+            "protocol_payload_sha256": "",
+            "protocol_raw_values": [],
+            "protocol_changed_indices": [],
+            "protocol_nonzero_values": {},
+        }
+
+    def _update_from_states(self, states: dict):
+        """Parse the named AIHome states map reported by Hisense dryers."""
+
+        def _flag(key):
+            value = states.get(key)
+            if value is None or value == "--":
+                return None
+            return _as_bool(value)
+
+        power_on = _flag("powerStatus")
+        run_state = _as_int(states.get("runStatus"))
+        paused = _flag("startPauseStatus")
+        if power_on is None:
+            machine_state = None
+        elif not power_on:
+            machine_state = "off"
+        elif paused:
+            machine_state = "paused"
+        elif run_state == 1:
+            machine_state = "running"
+        elif run_state == 0:
+            machine_state = "standby"
+        else:
+            machine_state = f"unknown_{run_state}"
+
+        method = states.get("dryingMethod")
+        door = states.get("doorLockStatus")
+        updates = {
+            "machine_state": machine_state,
+            "run_state": run_state,
+            "power_on": power_on,
+            "program": _as_int(states.get("workMode")),
+            "remaining_minutes": _as_int(states.get("remainRunTime")),
+            "dry_level": _as_int(states.get("dryLevel")),
+            "dry_temperature": _as_int(states.get("dryTemperature")),
+            "drying_method": None if method in (None, "--") else str(method),
+            "fault": _as_int(states.get("fault")),
+            "gate_locked": None if door in (None, "--") else str(door) == "1",
+            "child_lock": _flag("childLock"),
+        }
+        updates = {key: value for key, value in updates.items() if value is not None}
+        self._store_states(updates, states)
+        return set(updates)
+
+    async def _send_aihome_action(self, command, params, *, source_name=None):
+        """Keep dryer support read-only even if an inherited method is called."""
+        return False
+
+    async def _send_aihome_label(self, label_key: str, label_value) -> bool:
+        """Keep dryer support read-only even if an inherited method is called."""
         return False
 
     def get_status(self):
