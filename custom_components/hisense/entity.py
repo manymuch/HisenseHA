@@ -13,9 +13,26 @@ from .pyhisenseapi import HiSenseAC, HiSenseDryer, HiSenseFridge, HiSenseWasher
 
 
 class HisenseEntity(CoordinatorEntity[HisenseDataUpdateCoordinator]):
-    """Base entity for one Hisense device."""
+    """Base entity for one Hisense device.
+
+    Availability has exactly one gate: the device's own ``onlineStatus``. A
+    failed cloud read deliberately does *not* make entities unavailable — HA
+    then keeps the last known values on screen, which is far more useful than a
+    wall of "unavailable" entries.
+
+    Models that never report ``onlineStatus`` have no such key, and unknown is
+    not "offline", so they are unaffected.
+
+    Entities that report *about* connectivity — the diagnostic ``connectivity``
+    binary sensor and the manual refresh button — set
+    :attr:`_attr_available_offline` so they stay usable and can actually show
+    the offline state instead of going unavailable themselves.
+    """
 
     _attr_has_entity_name = True
+
+    #: Keep the entity available when the device or the cloud is unreachable.
+    _attr_available_offline: bool = False
 
     def __init__(
         self,
@@ -40,6 +57,18 @@ class HisenseEntity(CoordinatorEntity[HisenseDataUpdateCoordinator]):
     def client(self) -> HiSenseAC | HiSenseDryer | HiSenseFridge | HiSenseWasher:
         """Return the device API client."""
         return self.coordinator.client
+
+    @property
+    def available(self) -> bool:
+        """Return False only when the cloud says the device is offline.
+
+        ``online`` is ``None`` both for "not read yet" and for models that never
+        report ``onlineStatus``; unknown must not be treated as offline,
+        otherwise such models would lose every entity.
+        """
+        if self._attr_available_offline:
+            return True
+        return self.status.get("online") is not False
 
     @property
     def status(self) -> dict[str, Any]:

@@ -9,6 +9,27 @@ import uuid
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
+from .fridge_const import (
+    DBD_DEGERMING,
+    FREEZE_SET_TEMP_MAX,
+    FREEZE_SET_TEMP_MIN,
+    FRIDGE_ALARM_CODES,
+    MODE_SWITCH_OFF,
+    MODE_SWITCH_ON,
+    PARAM_DBD_DEGERMING,
+    PARAM_FREEZE_SET_TEMPERATURE,
+    PARAM_REFRIGERATOR_SET_TEMPERATURE,
+    PARAM_VARIATION_TEMP_SPACE_DRAWER,
+    REFRIGERATOR_SET_TEMP_MAX,
+    REFRIGERATOR_SET_TEMP_MIN,
+    SET_FREEZE_TEMPERATURE,
+    SET_REFRIGERATOR_TEMPERATURE,
+    SET_VARIATION_TEMP_SPACE_DRAWER,
+    UNSUPPORTED_ALARM_VALUE,
+    VARIATION_TEMP_SPACE_VALUES,
+    WORK_MODE_COMMANDS,
+)
+
 _LOGGER = logging.getLogger(__name__)
 
 _PORTAL_APP_KEY = "commonweb"
@@ -52,6 +73,145 @@ _WASHER_DRY_SETTING_LABELS = {
 # The named-states format reports the actual wash temperature in degrees
 # Celsius instead of the numbered index used by the legacy array format.
 _WASHER_STATES_TEMPERATURE_VALUES = (20, 30, 40, 60, 95)
+
+
+# ---------------------------------------------------------------------------
+# 冰箱（AIHome）常量
+#
+# 命令名与参数键名来自微信小程序真实抓包（设备 BCD-516WD1FPA-EQ51），
+# 全部实测返回 SUCCESS。命名规律：
+#   connector.device.command.<能力名>[.<子功能后缀>]
+# 详见 docs/冰箱开发指南.md 与 custom_components/hisense/fridge_const.py。
+# ---------------------------------------------------------------------------
+
+#: 冷藏室设定温度（带区域后缀，扁平驼峰参数键）
+_FRIDGE_CMD_SET_REFRIGERATOR_TEMPERATURE = SET_REFRIGERATOR_TEMPERATURE
+#: 冷冻室设定温度
+_FRIDGE_CMD_SET_FREEZE_TEMPERATURE = SET_FREEZE_TEMPERATURE
+#: 变温空间档位
+_FRIDGE_CMD_SET_VARIATION_TEMP_SPACE_DRAWER = SET_VARIATION_TEMP_SPACE_DRAWER
+#: DBD 除菌启停（无 Set 前缀）
+_FRIDGE_CMD_DBD_DEGERMING = DBD_DEGERMING
+
+#: 预设模式 → (command, 参数键)。本机仅实现 智能 / 速冷 两种。
+#: 定义在 :mod:`fridge_const`，与告警键同为单一来源。
+_FRIDGE_MODE_COMMANDS = WORK_MODE_COMMANDS
+
+#: 模式别名 → 内部名（兼容中文标签与旧 API 的整数编码）
+_FRIDGE_MODE_ALIASES = {
+    "smart": "SMART",
+    "智能": "SMART",
+    "智能模式": "SMART",
+    "64": "SMART",
+    "quick_cooling": "QUICK_COOLING",
+    "quickcooling": "QUICK_COOLING",
+    "速冷": "QUICK_COOLING",
+    "速冷模式": "QUICK_COOLING",
+    "65": "QUICK_COOLING",
+}
+
+#: 变温空间取值 → 语义（layout 的 modelCombFunction.subFunction）
+#: 定义在 :mod:`fridge_const`，与其 ``VARIATION_TEMP_SPACE_VALUES`` 同源。
+_FRIDGE_VARIATION_MODE_NAMES = VARIATION_TEMP_SPACE_VALUES
+
+#: 变温空间别名 → 数值（兼容中文标签与旧 API 英文名）
+_FRIDGE_VARIATION_MODE_ALIASES = {
+    "原鲜": 0,
+    "originalfresh1": 0,
+    "original_fresh": 0,
+    "0°养鲜": 1,
+    "0℃养鲜": 1,
+    "0度养鲜": 1,
+    "freshfood1": 1,
+    "fresh_food": 1,
+    "zero_c_fresh": 1,
+    "母婴": 2,
+    "infant1": 2,
+    "infant": 2,
+}
+
+#: 温度设定范围（由 getHomepageConfig 的 attribute.value 确证）
+_FRIDGE_REFRIGERATOR_TEMP_MIN = REFRIGERATOR_SET_TEMP_MIN
+_FRIDGE_REFRIGERATOR_TEMP_MAX = REFRIGERATOR_SET_TEMP_MAX
+_FRIDGE_FREEZE_TEMP_MIN = FREEZE_SET_TEMP_MIN
+_FRIDGE_FREEZE_TEMP_MAX = FREEZE_SET_TEMP_MAX
+
+#: 冰箱告警键（detail 的 states 里，"0"=正常 / "1"=异常 / "--"=机型不支持）。
+#: 定义在 :mod:`fridge_const` 里，作为命令/状态字典的单一来源。
+#: 逐项都做成 problem 二进制传感器，且**一律先建出来**：
+#:   "--"       → 记入 ``unsupported_alarms``，实体 unavailable 并由实体层写入
+#:                注册表禁用（机型确实没有这个功能）
+#:   键不存在   → 记入 ``missing_alarms``，只 unavailable，不禁用（下次完整
+#:                响应即恢复）
+_FRIDGE_ALARM_KEYS = tuple(FRIDGE_ALARM_CODES)
+
+#: 冰箱故障键（"1" = 故障）
+_FRIDGE_FAULT_STATES = (
+    "wifiModuleFault",
+    "iceMakerFault",
+    "odorSensorFault",
+    "waterTankInstFault",
+    "humiSensorFault",
+    "tempSensorFault",
+    "rightFreezeSensorFault",
+    "wineSensorFault",
+    "refriSensorFault",
+    "freezeSensorFault",
+    "variaSensorFault",
+    "wideSensorFault",
+    "condensationFanFault",
+    "refriFanFault",
+    "freezeFanFault",
+    "variaFanFault",
+    "wideFanFault",
+    "refriEvaporatorSensorFault",
+    "freezeEvaporatorSensorFault",
+    "variaEvaporatorSensorFault",
+    "wideEvaporatorSensorFault",
+    "dryWetDrawerSensorFault",
+    "variaTempDrawerSensorFault",
+    "iceInletPipeSensorFault",
+    "iceSensorFailure",
+    "iceTempSensorFailure",
+    "ambientLightSensorError",
+    "refriDamperFault",
+    "electricValveSwitchFreezeFault",
+    "electricValveSwitchRefriFault",
+    "freezeCapillaryCloggingFault",
+    "refriCapillaryCloggingFault",
+    "freezeDefrostingHeaterFault",
+    "duraTempSensorError",
+    "rxFailure",
+    "txFailure",
+    "frzDoorSensorError",
+    "frzDoorSensorFault",
+    "refDoorSensorError",
+    "refDoorSensorFault",
+)
+
+
+def _normalize_fridge_mode(mode_id):
+    """Map a mode identifier (name/label/legacy int) to SMART / QUICK_COOLING."""
+    if mode_id is None:
+        return None
+    if isinstance(mode_id, (int, float)):
+        mode_id = str(int(mode_id))
+    return _FRIDGE_MODE_ALIASES.get(str(mode_id).strip().lower())
+
+
+def _normalize_variation_mode(mode_id):
+    """Map a variation-drawer identifier to its numeric AIHome value."""
+    if mode_id is None:
+        return None
+    if isinstance(mode_id, (int, float)):
+        value = int(mode_id)
+        return value if value in _FRIDGE_VARIATION_MODE_NAMES else None
+    key = str(mode_id).strip()
+    if key.isdigit() or (key.startswith("-") and key[1:].isdigit()):
+        value = int(key)
+        return value if value in _FRIDGE_VARIATION_MODE_NAMES else None
+    return _FRIDGE_VARIATION_MODE_ALIASES.get(key.lower())
+
 
 
 class HiSenseLogin:
@@ -1345,7 +1505,23 @@ class HiSenseAC(_HiSenseDevice):
 
 
 class HiSenseFridge(_HiSenseDevice):
-    """Read refrigerator temperatures when AIHome exposes a status array."""
+    """Hisense AIHome refrigerator: named-state reads and control commands.
+
+    State is read from the AIHome ``detail`` response ``states`` mapping by key
+    (never by parsing the legacy comma-separated status array). Control uses the
+    command/parameter names confirmed by a real mini-program capture; see
+    :mod:`custom_components.hisense.fridge_const`.
+    """
+
+    #: 状态键 → 内部状态字段（温度：设定 / 实际 / 显示 三种前缀严格区分）
+    _SET_TEMPERATURE_KEYS = (
+        "refrigeratorSetTemperature",
+        "setTemperature.refrigerator",
+    )
+    _FREEZE_SET_TEMPERATURE_KEYS = (
+        "freezeSetTemperature",
+        "setTemperature.freeze",
+    )
 
     async def check_status(self):
         if not await self.refresh():
@@ -1371,67 +1547,291 @@ class HiSenseFridge(_HiSenseDevice):
         states = device.get("states") or payload.get("states") or {}
         if not isinstance(states, dict):
             states = {}
-        self._update_from_states(states)
-
-        # Issue #14 documents these positions for a legacy status array. Only
-        # interpret them when the AIHome detail response carries that same array.
-        raw = next(
-            (
-                node.get("deviceStatus")
-                for node in (states, device, payload)
-                if isinstance(node, dict) and node.get("deviceStatus") is not None
-            ),
-            None,
-        )
-        if isinstance(raw, str):
-            parts = raw.split(",")
-        elif isinstance(raw, list):
-            parts = raw
-        else:
-            parts = []
-        if len(parts) > 9:
-            try:
-                values = [int(str(parts[index]).strip()) for index in (0, 1, 9)]
-            except (TypeError, ValueError):
-                _LOGGER.warning("Hisense AIHome fridge status array has invalid temperatures")
-            else:
-                if 1 <= values[0] <= 10 and -25 <= values[1] <= -15:
-                    self.status.update(
-                        refrigerator_temperature=values[0],
-                        freezer_temperature=values[1],
-                        ambient_temperature=values[2],
-                    )
-                else:
-                    _LOGGER.warning("Hisense AIHome fridge status array is outside known ranges")
+        # reportTime 是设备最后一次上报云端的时间（无时区的本地时间串）。
+        # 它不在 states 里、也不参与离线降级：设备离线时它停在旧值，
+        # 正好反映「手上这份数据有多旧」，所以无论在线离线都照常记录。
+        report_time = device.get("reportTime") or payload.get("reportTime")
+        if isinstance(report_time, str) and report_time:
+            self.status["report_time"] = report_time
+        fresh_keys = self._update_from_states(states) or set()
+        self._reconcile_pending_status(fresh_keys)
         return self.get_status() if self.status else None
 
-    unsupported_features = frozenset(
-        {
-            "power",
-            "refrigerator_temperature",
-            "freezer_temperature",
-            "work_mode",
-            "variation_mode",
+    def _update_from_states(self, states: dict):
+        """Parse the named AIHome states map into internal status fields."""
+
+        def value(*keys, default=None):
+            for key in keys:
+                if key in states:
+                    return states[key]
+            return default
+
+        def number(*keys):
+            raw = value(*keys)
+            return None if raw in (None, "--") else _as_number(raw)
+
+        def flag(*keys):
+            raw = value(*keys)
+            return None if raw in (None, "--") else _as_bool(raw)
+
+        # 离线降级：设备离线时 detail 返回的是云端缓存，告警/故障位可能被写成
+        # "0"、部分键可能整段缺失、甚至全部变成 "--"。如果照常解析，会得出
+        # 「全部告警正常」「这些功能都不支持」两个错误结论，后者还会在重启后
+        # 把对应实体永久删掉。所以离线时只认 onlineStatus，其余字段保持上一次
+        # 在线时的值（实体侧统一置为 unavailable，不会把旧值当成现状展示）。
+        online = flag("onlineStatus")
+        if online is False:
+            self.status["online"] = False
+            return {"online"}
+
+        variation = number("variationTempSpaceDrawer")
+        # 除菌：layout 第 18-21 栏把三个键列为同一功能的备选上报名，实测只有
+        # dBDDegerming 跟随 DBDDegerming 命令变化（1=运行中 / 0=停止），
+        # cleanerSwitch 开后不跟关，degermingSwitch 恒 0。所以实体只绑前者，
+        # 另两个保留原始值放属性备查。
+        degerming_bits = {
+            "degermingSwitch": flag("degermingSwitch"),
+            "cleanerSwitch": flag("cleanerSwitch"),
+            "dBDDegerming": flag("dBDDegerming"),
         }
-    )
+        degerming_active = degerming_bits["dBDDegerming"]
+        updates = {
+            # 温度：设定值（number 可写）
+            "refrigerator_temperature": number(*self._SET_TEMPERATURE_KEYS),
+            "freezer_temperature": number(*self._FREEZE_SET_TEMPERATURE_KEYS),
+            # 温度：实际值（sensor 只读）
+            "refrigerator_real_temperature": number("refrigeratorRealTemperature"),
+            "freezer_real_temperature": number("freezeRealTemperature"),
+            # 温度：面板显示值（sensor 只读，诊断用）
+            "display_refrigerator_temperature": number(
+                "displayTemperature.refrigerator"
+            ),
+            "display_freezer_temperature": number("displayTemperature.freeze"),
+            # 开关 / 在线
+            "power_on": flag("refrigeratorOn"),
+            "online": flag("onlineStatus"),
+            # 压缩机频率（Hz）：0 = 停机，是"到底有没有在制冷"的直接证据
+            "compressor_frequency": number("compressorFrequency"),
+            # 模式：用布尔位（跨机型稳定）。workMode 总编码本机是 0/3/--，
+            # 旧固件是 64/65，编码不统一，不用于读状态。
+            "smart_mode": flag("workMode.Smart"),
+            "quick_cooling_mode": flag("workMode.QuickCooling"),
+            # 变温空间
+            "variation_mode_id": variation,
+            "variation_mode": (
+                _FRIDGE_VARIATION_MODE_NAMES.get(variation)
+                if variation is not None
+                else None
+            ),
+            # 净化 / 除菌
+            "degerming_bits": degerming_bits,
+            "degerming_active": degerming_active,
+            "degerming_switch": degerming_bits["degermingSwitch"],
+            "cleaner_switch": degerming_bits["cleanerSwitch"],
+        }
 
-    async def turn_on(self):
-        return False
+        # 告警：detail 的 states 直接给出每个告警位。
+        #   "0"  = 正常      → alarm_states[key] = False
+        #   "1"  = 异常      → alarm_states[key] = True
+        #   "--" = 机型不支持 → 记入 unsupported，对应实体显示 unavailable 并禁用
+        #   缺失 = 本次响应不完整 → 只记入 missing，不当作不支持（否则会把
+        #          有效实体永久禁用，再也回不来）
+        alarm_states = {}
+        unsupported_alarms = []
+        missing_alarms = []
+        for code in _FRIDGE_ALARM_KEYS:
+            raw = states.get(code)
+            if raw == "1":
+                alarm_states[code] = True
+            elif raw == "0":
+                alarm_states[code] = False
+            elif raw == UNSUPPORTED_ALARM_VALUE:
+                # 机型明确不支持 → 实体保留但不可用，并写入实体注册表禁用
+                unsupported_alarms.append(code)
+            else:
+                # 键缺失 → 只是这次没读到，下一次完整响应就会恢复
+                missing_alarms.append(code)
+        active_alarms = [code for code, on in alarm_states.items() if on]
+        updates["alarm_states"] = alarm_states
+        updates["unsupported_alarms"] = unsupported_alarms
+        updates["missing_alarms"] = missing_alarms
+        updates["active_alarms"] = active_alarms
+        updates["alarm"] = bool(active_alarms)
 
-    async def turn_off(self):
-        return False
+        # 故障：任一故障键为 "1" 即认为有故障
+        faults = [
+            code for code in _FRIDGE_FAULT_STATES if states.get(code) == "1"
+        ]
+        updates["fault"] = bool(faults)
+        updates["active_faults"] = faults
+
+        updates = {key: v for key, v in updates.items() if v is not None}
+        self.status.update(updates)
+        return set(updates)
+
+    # ------------------------------------------------------------------
+    # 控制
+    # ------------------------------------------------------------------
 
     async def set_refrigerator_temperature(self, temperature: int):
-        return False
+        """Set the refrigerator (fridge) compartment target temperature."""
+        temperature = self._clamp(
+            temperature,
+            _FRIDGE_REFRIGERATOR_TEMP_MIN,
+            _FRIDGE_REFRIGERATOR_TEMP_MAX,
+        )
+        ok = await self._send_aihome_action(
+            _FRIDGE_CMD_SET_REFRIGERATOR_TEMPERATURE,
+            {PARAM_REFRIGERATOR_SET_TEMPERATURE: {"value": temperature}},
+        )
+        if ok:
+            # 手动改温度会退出预设模式，同步清掉模式位
+            self._set_pending_status(
+                {
+                    "refrigerator_temperature": temperature,
+                    "smart_mode": False,
+                    "quick_cooling_mode": False,
+                }
+            )
+        return ok
 
     async def set_freeze_temperature(self, temperature: int):
-        return False
+        """Set the freezer compartment target temperature.
 
-    async def set_work_mode(self, mode_id: int):
-        return False
+        Per the cloud conflict table, ``SetTemperature.Freeze`` only conflicts with
+        the Smart mode (``0``); QuickCooling (``3``) does *not* block freezer
+        temperature, so we must not clear that bit here.
+        """
+        temperature = self._clamp(
+            temperature, _FRIDGE_FREEZE_TEMP_MIN, _FRIDGE_FREEZE_TEMP_MAX
+        )
+        ok = await self._send_aihome_action(
+            _FRIDGE_CMD_SET_FREEZE_TEMPERATURE,
+            {PARAM_FREEZE_SET_TEMPERATURE: {"value": temperature}},
+        )
+        if ok:
+            self._set_pending_status(
+                {
+                    "freezer_temperature": temperature,
+                    "smart_mode": False,
+                }
+            )
+        return ok
 
-    async def set_fridge_mode(self, mode_id: int):
-        return False
+    async def set_work_mode(self, mode_id: int | str | None, *, enable: bool = True):
+        """Enable or disable one preset working mode (legacy entry point)."""
+        return await self.set_fridge_mode(mode_id, enable=enable)
 
-    async def set_variation_mode(self, mode_id: int):
-        return False
+    async def set_fridge_mode(self, mode_id: int | str | None, *, enable: bool = True):
+        """Turn the 智能 or 速冷 preset mode on or off.
+
+        ``mode_id`` accepts the internal names (``SMART`` / ``QUICK_COOLING``),
+        the Chinese labels, or the integer codes used by the legacy API
+        (``64`` = smart, ``65`` = quick cooling).
+
+        Both directions use the same command/parameter pair and differ only in
+        the value (``"1"`` / ``"0"``); the App sends ``exclusionFlag: 1`` in
+        either case, so no extra payload is needed.
+        """
+        mode = _normalize_fridge_mode(mode_id)
+        if mode is None:
+            _LOGGER.warning("Hisense fridge: unknown work mode %r", mode_id)
+            return False
+        command, param = _FRIDGE_MODE_COMMANDS[mode]
+        value = MODE_SWITCH_ON if enable else MODE_SWITCH_OFF
+        ok = await self._send_aihome_action(command, {param: {"value": value}})
+        if ok:
+            if enable:
+                # 两种模式互斥：开一个，另一个必然被云端关掉。
+                self._set_pending_status(
+                    {
+                        "smart_mode": mode == "SMART",
+                        "quick_cooling_mode": mode == "QUICK_COOLING",
+                    }
+                )
+            else:
+                self._set_pending_status(
+                    {
+                        "smart_mode"
+                        if mode == "SMART"
+                        else "quick_cooling_mode": False
+                    }
+                )
+        return ok
+
+    async def clear_fridge_modes(self):
+        """Leave whatever preset mode is running and return to manual control.
+
+        Turning the mode off does not touch the set temperatures: the cloud
+        overwrites ``displayTemperature`` while a mode is active, while
+        ``refrigeratorSetTemperature`` / ``freezeSetTemperature`` keep the value
+        the user dialled in, so the fridge falls back to it by itself.
+        """
+        active = [
+            mode
+            for mode, key in (
+                ("SMART", "smart_mode"),
+                ("QUICK_COOLING", "quick_cooling_mode"),
+            )
+            if self.status.get(key)
+        ]
+        if not active:
+            # 本来就不在预设模式：已经是自定义，无需下发。
+            return True
+        for mode in active:
+            if not await self.set_fridge_mode(mode, enable=False):
+                return False
+        return True
+
+    async def set_fridge_degerming(self, enabled: bool):
+        """Start or stop the combined degerming + odor-removal cycle.
+
+        One command drives both: after ``dBDDegerming=1`` the device reports
+        ``dBDDegerming`` and ``cleanerSwitch`` as ``1`` together (the layout
+        section is titled 离子除菌净味系统), which is why the control entity is
+        named "除菌+净味".
+
+        The command name has **no** ``Set`` prefix (unlike every other fridge
+        command); ``SetDegermingSwitch`` / ``SetCleanerSwitch`` / ``SetDBDDegerming``
+        all return ``notSupported``.
+        """
+        value = "1" if enabled else "0"
+        ok = await self._send_aihome_action(
+            _FRIDGE_CMD_DBD_DEGERMING,
+            {PARAM_DBD_DEGERMING: {"value": value}},
+        )
+        if ok:
+            self._set_pending_status({"degerming_active": bool(enabled)})
+        return ok
+
+    async def set_variation_mode(self, mode_id: int | str | None):
+        """Set the variable-temperature drawer mode.
+
+        Accepts the numeric AIHome value (0 = 原鲜, 1 = 0℃养鲜, 2 = 母婴), the
+        Chinese label, or the legacy English aliases (``ORIGINAL_FRESH`` etc.).
+        """
+        value = _normalize_variation_mode(mode_id)
+        if value is None:
+            _LOGGER.warning("Hisense fridge: unknown variation mode %r", mode_id)
+            return False
+        ok = await self._send_aihome_action(
+            _FRIDGE_CMD_SET_VARIATION_TEMP_SPACE_DRAWER,
+            {PARAM_VARIATION_TEMP_SPACE_DRAWER: {"value": value}},
+        )
+        if ok:
+            self._set_pending_status(
+                {
+                    "variation_mode_id": value,
+                    "variation_mode": _FRIDGE_VARIATION_MODE_NAMES.get(value),
+                }
+            )
+        return ok
+
+    @staticmethod
+    def _clamp(value, lower, upper):
+        try:
+            number = int(round(float(value)))
+        except (TypeError, ValueError):
+            return lower
+        return max(lower, min(upper, number))
+

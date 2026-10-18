@@ -71,6 +71,9 @@
       },
       "prompt_sound": {
         "name": "提示音"
+      },
+      "fridge_degerming": {
+        "name": "除菌+净味"
       }
     },
     "button": {
@@ -84,17 +87,44 @@
       },
       "climate_max_temp": {
         "name": "最高温度"
+      },
+      "fridge_refrigerator_target_temperature": {
+        "name": "温度设定-冷藏室"
+      },
+      "fridge_freezer_target_temperature": {
+        "name": "温度设定-冷冻室"
+      }
+    },
+    "select": {
+      "fridge_work_mode_select": {
+        "name": "设置-工作模式",
+        "state": {
+          "智能": "智能",
+          "速冷": "速冷",
+          "自定义": "自定义"
+        }
+      },
+      "fridge_variation_mode_select": {
+        "name": "设置-变温空间",
+        "state": {
+          "原鲜": "原鲜",
+          "0℃养鲜": "0℃养鲜",
+          "母婴": "母婴"
+        }
       }
     },
     "sensor": {
       "fridge_refrigerator_temperature": {
-        "name": "冷藏室温度"
+        "name": "温度-冷藏室实际"
       },
       "fridge_freezer_temperature": {
-        "name": "冷冻室温度"
+        "name": "温度-冷冻室实际"
       },
-      "fridge_ambient_temperature": {
-        "name": "环境温度"
+      "fridge_variation_mode": {
+        "name": "模式-变温空间"
+      },
+      "fridge_work_mode": {
+        "name": "模式-工作模式"
       },
       "today_energy": {
         "name": "今日耗电量"
@@ -202,9 +232,69 @@
       },
       "dryer_fault": {
         "name": "故障代码"
+      },
+      "fridge_compressor_frequency": {
+        "name": "压缩机频率"
+      },
+      "fridge_refrigerator_display_temperature": {
+        "name": "温度-冷藏室生效"
+      },
+      "fridge_freezer_display_temperature": {
+        "name": "温度-冷冻室生效"
+      },
+      "fridge_data_updated": {
+        "name": "上次数据更新时间"
       }
     },
     "binary_sensor": {
+      "fridge_alarm_refriOpenDoorAlarm": {
+        "name": "告警-冷藏室门未关"
+      },
+      "fridge_alarm_freezeOpenDoorAlarm": {
+        "name": "告警-冷冻室门未关"
+      },
+      "fridge_alarm_variaOpenDoorAlarm": {
+        "name": "告警-变温室门未关"
+      },
+      "fridge_alarm_wideOpenDoorAlarm": {
+        "name": "告警-宽温室门未关"
+      },
+      "fridge_alarm_refriLeftOpenDoorAlarm": {
+        "name": "告警-冷藏门未关严"
+      },
+      "fridge_alarm_freezeLeftOpenDoorAlarm": {
+        "name": "告警-冷冻门未关严"
+      },
+      "fridge_alarm_freezeOverTempAlarm": {
+        "name": "告警-冷冻室超温"
+      },
+      "fridge_alarm_variaOverTempAlarm": {
+        "name": "告警-变温室超温"
+      },
+      "fridge_alarm_wideOverTempAlarm": {
+        "name": "告警-宽温室超温"
+      },
+      "fridge_alarm_refriOverTempAlarm": {
+        "name": "告警-冷藏室超温"
+      },
+      "fridge_alarm_refriOverTempAlarm_high": {
+        "name": "告警-冷藏室超温(偏高)"
+      },
+      "fridge_alarm_refriOverTempAlarm_low": {
+        "name": "告警-冷藏室超温(偏低)"
+      },
+      "fridge_alarm_iceMakerWaterLackAlarm": {
+        "name": "告警-制冰储水盒缺水"
+      },
+      "fridge_alarm_hydropeniaAlarm": {
+        "name": "告警-缺水"
+      },
+      "fridge_alarm_mildOdorAlarm": {
+        "name": "告警-冷藏室轻微异味"
+      },
+      "fridge_alarm_severeOdorAlarm": {
+        "name": "告警-冷藏室气味过大"
+      },
       "washer_power": {
         "name": "电源"
       },
@@ -222,6 +312,18 @@
       },
       "dryer_child_lock": {
         "name": "童锁"
+      },
+      "fridge_connectivity": {
+        "name": "云连接状态"
+      },
+      "fridge_power": {
+        "name": "运行状态"
+      },
+      "fridge_degerming_active": {
+        "name": "除菌运行中"
+      },
+      "fridge_cleaner": {
+        "name": "净味"
       }
     }
   }

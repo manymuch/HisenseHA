@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .pyhisenseapi import HiSenseAC, HiSenseDryer, HiSenseFridge, HiSenseWasher
@@ -17,6 +19,18 @@ _LOGGER = logging.getLogger(__name__)
 _CONTROL_REFRESH_DELAY = 1.0
 _RETRY_DELAY = 60.0
 _MAX_ATTEMPTS = 3
+
+#: 冰箱定时轮询间隔（秒）。
+#:
+#: 冰箱是唯一"人不在跟前、状态却要主动看"的设备：门有没有关严、除菌跑完没有、
+#: 压缩机停没停，这些都不会因为用户操作 HA 而触发回读。没有轮询时，这些状态
+#: 只会在 HA 启动/重载或手动点「强制更新」时刷新，门开了几个小时都不会报警。
+#:
+#: 60 秒是折中：设备上报云端本身有节流（抓包里 reportTime 比请求时间晚约 1 分钟），
+#: 轮询再快也拿不到更新的数据，只会白耗请求额度。空调/洗衣机保持原来的
+#: 事件驱动（不轮询），因为它们的操作都发生在 HA 里，控制后 1 秒就会回读。
+_FRIDGE_SCAN_INTERVAL = 60
+
 
 
 class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -33,11 +47,18 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.device_type = device_type
         self._entry = entry
         self._refresh_task: asyncio.Task | None = None
+        #: 上一次成功读到云端数据的本地时刻。设备自己报的 ``reportTime``
+        #: 缺失时（少数机型）用它兜底，让「上次数据更新时间」实体始终有值。
+        self.last_success_time: datetime | None = None
         super().__init__(
             hass,
             _LOGGER,
             name=f"{DOMAIN}_{client.device_id}",
-            update_interval=None,
+            update_interval=(
+                timedelta(seconds=_FRIDGE_SCAN_INTERVAL)
+                if device_type == "冰箱"
+                else None
+            ),
         )
         # No first refresh has completed; HA's coordinator defaults this to True.
         self.last_update_success = False
@@ -53,6 +74,8 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 energy_status = None
             if energy_status:
                 status = energy_status
+        if status:
+            self.last_success_time = dt_util.utcnow()
         return status
 
     async def _async_update_data(self) -> dict[str, Any]:

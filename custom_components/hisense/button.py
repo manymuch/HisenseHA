@@ -18,15 +18,13 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
 class HisenseACUpdateButton(HisenseEntity, ButtonEntity):
     _attr_translation_key = "force_update"
 
+    #: 手动恢复按钮在设备离线/断网时仍需可按，这是唯一的自救入口。
+    _attr_available_offline = True
+
     def __init__(self, coordinator):
         super().__init__(coordinator, "force_update_button", "force_update")
         self._attr_icon = "mdi:refresh"
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
-
-    @property
-    def available(self) -> bool:
-        """Keep manual recovery accessible while the device is unavailable."""
-        return True
 
     async def async_press(self):
         """Handle the button press."""
