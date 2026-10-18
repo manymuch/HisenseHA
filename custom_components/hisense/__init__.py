@@ -51,11 +51,15 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
         device_name = device_info.get("device_name", "")
         device_code = device_info.get("device_code", "")
 
-        friendly_name = (
-            f"{device_type_name}_{device_name}"
-            if device_type_name and device_name
-            else device_id
-        )
+        # 组合显示名。device_type_name 在部分机型上会回退成产品型号（与
+        # device_name 相同），此时不要重复拼接成 "型号_型号"。
+        if device_type_name and device_name:
+            if device_type_name == device_name:
+                friendly_name = device_name
+            else:
+                friendly_name = f"{device_type_name}_{device_name}"
+        else:
+            friendly_name = device_type_name or device_name or device_id
         entity_name = device_code if device_code else device_id
 
         if device_type == "洗衣机":
