@@ -1,0 +1,330 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "HiSense Smart Device",
+        "description": "Login with App username and password",
+        "data": {
+          "username": "App login username, could be the phone number",
+          "password": "App login password, if not available set it in the app first"
+        }
+      },
+      "home": {
+        "title": "HiSense Smart Device",
+        "description": "Select your home"
+      },
+      "device": {
+        "title": "HiSense Smart Device",
+        "description": "Select your device(s)"
+      },
+      "reauth_confirm": {
+        "title": "Sign in to Hisense AIHome again",
+        "description": "Enter your AIHome username and password to restore the devices.",
+        "data": {
+          "username": "AIHome username",
+          "password": "AIHome password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to the device",
+      "invalid_auth": "Failed to login",
+      "no_devices": "No supported Hisense devices were found",
+      "no_homes": "No homes were found for this account",
+      "wrong_account": "This account does not contain the configured devices",
+      "unknown": "An unknown error occurred"
+    },
+    "title": "Hisense Smart Device"
+  },
+  "device": {
+    "hisense_ac": {
+      "name": "Hisense AC"
+    },
+    "hisense_fridge": {
+      "name": "Hisense Fridge"
+    },
+    "hisense_washer": {
+      "name": "Hisense Washer"
+    },
+    "hisense_dryer": {
+      "name": "Hisense Dryer"
+    }
+  },
+  "entity": {
+    "climate": {
+      "thermostat": {
+        "name": "Climate"
+      }
+    },
+    "switch": {
+      "screen_panel": {
+        "name": "Screen panel"
+      },
+      "auxiliary_heat": {
+        "name": "Auxiliary heat"
+      },
+      "fast_cool_heat": {
+        "name": "Fast cooling/heating"
+      },
+      "nature_wind": {
+        "name": "Nature wind"
+      },
+      "prompt_sound": {
+        "name": "Prompt sound"
+      },
+      "fridge_degerming": {
+        "name": "Degerming + odor removal"
+      }
+    },
+    "button": {
+      "force_update": {
+        "name": "Force refresh"
+      }
+    },
+    "number": {
+      "climate_min_temp": {
+        "name": "Thermostat min temperature"
+      },
+      "climate_max_temp": {
+        "name": "Thermostat max temperature"
+      },
+      "fridge_refrigerator_target_temperature": {
+        "name": "Set temperature - Refrigerator"
+      },
+      "fridge_freezer_target_temperature": {
+        "name": "Set temperature - Freezer"
+      }
+    },
+    "select": {
+      "fridge_work_mode_select": {
+        "name": "Setting - Work mode",
+        "state": {
+          "智能": "Smart",
+          "速冷": "Quick cooling",
+          "自定义": "Custom"
+        }
+      },
+      "fridge_variation_mode_select": {
+        "name": "Setting - Variation drawer",
+        "state": {
+          "原鲜": "Original fresh",
+          "0℃养鲜": "0°C fresh",
+          "母婴": "Baby care"
+        }
+      }
+    },
+    "sensor": {
+      "fridge_refrigerator_temperature": {
+        "name": "Temperature - Refrigerator (actual)"
+      },
+      "fridge_freezer_temperature": {
+        "name": "Temperature - Freezer (actual)"
+      },
+      "fridge_variation_mode": {
+        "name": "Mode - Variation drawer"
+      },
+      "fridge_work_mode": {
+        "name": "Mode - Work mode"
+      },
+      "today_energy": {
+        "name": "Today's energy"
+      },
+      "run_time": {
+        "name": "Today's runtime"
+      },
+      "washer_protocol_debug": {
+        "name": "Washer Protocol State"
+      },
+      "washer_run_state": {
+        "name": "Run state",
+        "state": {
+          "off": "Off",
+          "complete": "Complete",
+          "running": "Running",
+          "standby": "Standby",
+          "paused": "Paused"
+        }
+      },
+      "washer_phase": {
+        "name": "Cycle phase",
+        "state": {
+          "standby": "Standby",
+          "reservation_wait": "Reservation wait",
+          "soaking": "Soaking",
+          "prewash": "Prewash",
+          "main_wash": "Main wash",
+          "rinse": "Rinse",
+          "spin": "Spin",
+          "complete": "Complete",
+          "drying": "Drying",
+          "air_dry": "Air dry",
+          "fresh_care": "Fresh care"
+        }
+      },
+      "washer_program": {
+        "name": "Program code"
+      },
+      "washer_remaining_time": {
+        "name": "Remaining time"
+      },
+      "washer_fault": {
+        "name": "Fault code"
+      },
+      "washer_motor_speed": {
+        "name": "Motor speed"
+      },
+      "washer_temperature_raw": {
+        "name": "Temperature raw value"
+      },
+      "washer_configured_spin": {
+        "name": "Configured spin"
+      },
+      "washer_configured_temperature": {
+        "name": "Configured temperature",
+        "state": {
+          "ambient": "Ambient",
+          "temperature_20_c": "20 °C",
+          "temperature_30_c": "30 °C",
+          "temperature_40_c": "40 °C",
+          "temperature_60_c": "60 °C",
+          "temperature_95_c": "95 °C"
+        }
+      },
+      "washer_dry_setting": {
+        "name": "Dry setting",
+        "state": {
+          "off": "Off",
+          "ready_to_wear": "Ready to wear",
+          "ironing": "Ironing",
+          "storage": "Storage",
+          "timed_dry_level_1": "Timed dry level 1",
+          "timed_dry_level_2": "Timed dry level 2",
+          "timed_dry_level_3": "Timed dry level 3",
+          "timed_dry_level_4": "Timed dry level 4",
+          "timed_dry_level_5": "Timed dry level 5",
+          "timed_dry_level_6": "Timed dry level 6"
+        }
+      },
+      "dryer_run_state": {
+        "name": "Run state",
+        "state": {
+          "off": "Off",
+          "complete": "Complete",
+          "running": "Running",
+          "standby": "Standby",
+          "paused": "Paused"
+        }
+      },
+      "dryer_program": {
+        "name": "Program code"
+      },
+      "dryer_remaining_time": {
+        "name": "Remaining time"
+      },
+      "dryer_dry_level": {
+        "name": "Dry level"
+      },
+      "dryer_dry_temperature": {
+        "name": "Dry temperature"
+      },
+      "dryer_drying_method": {
+        "name": "Drying method"
+      },
+      "dryer_fault": {
+        "name": "Fault code"
+      },
+      "fridge_compressor_frequency": {
+        "name": "Compressor frequency"
+      },
+      "fridge_refrigerator_display_temperature": {
+        "name": "Temperature - Refrigerator (effective)"
+      },
+      "fridge_freezer_display_temperature": {
+        "name": "Temperature - Freezer (effective)"
+      },
+      "fridge_data_updated": {
+        "name": "Last data update"
+      }
+    },
+    "binary_sensor": {
+      "fridge_alarm_refriOpenDoorAlarm": {
+        "name": "Alarm - Refrigerator door open"
+      },
+      "fridge_alarm_freezeOpenDoorAlarm": {
+        "name": "Alarm - Freezer door open"
+      },
+      "fridge_alarm_variaOpenDoorAlarm": {
+        "name": "Alarm - Variation drawer door open"
+      },
+      "fridge_alarm_wideOpenDoorAlarm": {
+        "name": "Alarm - Wide compartment door open"
+      },
+      "fridge_alarm_refriLeftOpenDoorAlarm": {
+        "name": "Alarm - Refrigerator door ajar"
+      },
+      "fridge_alarm_freezeLeftOpenDoorAlarm": {
+        "name": "Alarm - Freezer door ajar"
+      },
+      "fridge_alarm_freezeOverTempAlarm": {
+        "name": "Alarm - Freezer over temperature"
+      },
+      "fridge_alarm_variaOverTempAlarm": {
+        "name": "Alarm - Variation drawer over temperature"
+      },
+      "fridge_alarm_wideOverTempAlarm": {
+        "name": "Alarm - Wide compartment over temperature"
+      },
+      "fridge_alarm_refriOverTempAlarm": {
+        "name": "Alarm - Refrigerator over temperature"
+      },
+      "fridge_alarm_refriOverTempAlarm_high": {
+        "name": "Alarm - Refrigerator over temperature (high)"
+      },
+      "fridge_alarm_refriOverTempAlarm_low": {
+        "name": "Alarm - Refrigerator over temperature (low)"
+      },
+      "fridge_alarm_iceMakerWaterLackAlarm": {
+        "name": "Alarm - Ice maker water tank empty"
+      },
+      "fridge_alarm_hydropeniaAlarm": {
+        "name": "Alarm - Water shortage"
+      },
+      "fridge_alarm_mildOdorAlarm": {
+        "name": "Alarm - Mild odor"
+      },
+      "fridge_alarm_severeOdorAlarm": {
+        "name": "Alarm - Severe odor"
+      },
+      "washer_power": {
+        "name": "Power"
+      },
+      "washer_gate_lock": {
+        "name": "Door lock"
+      },
+      "washer_child_lock": {
+        "name": "Child lock"
+      },
+      "dryer_power": {
+        "name": "Power"
+      },
+      "dryer_gate_lock": {
+        "name": "Door lock"
+      },
+      "dryer_child_lock": {
+        "name": "Child lock"
+      },
+      "fridge_connectivity": {
+        "name": "Connectivity"
+      },
+      "fridge_power": {
+        "name": "Power"
+      },
+      "fridge_degerming_active": {
+        "name": "Degerming running"
+      },
+      "fridge_cleaner": {
+        "name": "Odor removal"
+      }
+    }
+  }
+}

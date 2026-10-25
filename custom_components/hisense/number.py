@@ -1,11 +1,18 @@
 from homeassistant.components.number import NumberEntity, NumberEntityDescription, NumberMode
 from homeassistant.const import UnitOfTemperature
 from homeassistant.core import callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 from homeassistant.helpers.entity import EntityCategory
 
 from .const import DOMAIN, climate_limits_signal
 from .entity import HisenseEntity
+from .fridge_const import (
+    FREEZE_SET_TEMP_MAX,
+    FREEZE_SET_TEMP_MIN,
+    REFRIGERATOR_SET_TEMP_MAX,
+    REFRIGERATOR_SET_TEMP_MIN,
+)
 
 CLIMATE_LIMIT_DESCRIPTIONS: tuple[NumberEntityDescription, ...] = (
     NumberEntityDescription(
@@ -31,6 +38,30 @@ CLIMATE_LIMIT_DESCRIPTIONS: tuple[NumberEntityDescription, ...] = (
 )
 
 
+FRIDGE_TEMPERATURE_DESCRIPTIONS: tuple[NumberEntityDescription, ...] = (
+    NumberEntityDescription(
+        key="refrigerator_temperature",
+        translation_key="fridge_refrigerator_target_temperature",
+        native_min_value=REFRIGERATOR_SET_TEMP_MIN,
+        native_max_value=REFRIGERATOR_SET_TEMP_MAX,
+        native_step=1,
+        mode=NumberMode.BOX,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        icon="mdi:fridge-top",
+    ),
+    NumberEntityDescription(
+        key="freezer_temperature",
+        translation_key="fridge_freezer_target_temperature",
+        native_min_value=FREEZE_SET_TEMP_MIN,
+        native_max_value=FREEZE_SET_TEMP_MAX,
+        native_step=1,
+        mode=NumberMode.BOX,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        icon="mdi:snowflake-thermometer",
+    ),
+)
+
+
 async def async_setup_entry(hass, config_entry, async_add_entities):
     coordinators = hass.data[DOMAIN][config_entry.entry_id]
     ac_coordinators = [
@@ -42,6 +73,45 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         for desc in CLIMATE_LIMIT_DESCRIPTIONS
     ]
     async_add_entities(entities)
+
+    fridge_coordinators = [
+        c for c in coordinators.values() if c.device_type == "冰箱"
+    ]
+    async_add_entities(
+        HisenseFridgeTemperatureNumber(coordinator, description)
+        for coordinator in fridge_coordinators
+        for description in FRIDGE_TEMPERATURE_DESCRIPTIONS
+    )
+
+
+class HisenseFridgeTemperatureNumber(HisenseEntity, NumberEntity):
+    """Writable refrigerator / freezer target temperature."""
+
+    entity_description: NumberEntityDescription
+
+    def __init__(self, coordinator, description: NumberEntityDescription):
+        super().__init__(
+            coordinator, description.key, description.key, description.icon
+        )
+        self.entity_description = description
+
+    @property
+    def native_value(self) -> float | None:
+        value = self.status.get(self.entity_description.key)
+        return None if value is None else float(value)
+
+    async def async_set_native_value(self, value: float) -> None:
+        target = int(round(value))
+        if self.entity_description.key == "refrigerator_temperature":
+            ok = await self.client.set_refrigerator_temperature(target)
+            action = "冷藏"
+        else:
+            ok = await self.client.set_freeze_temperature(target)
+            action = "冷冻"
+        if ok:
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError(f"Failed to set Hisense fridge {action} temperature")
 
 
 class HisenseClimateLimitNumber(HisenseEntity, NumberEntity):

@@ -13,9 +13,17 @@ from .pyhisenseapi import HiSenseAC, HiSenseDryer, HiSenseFridge, HiSenseWasher
 
 
 class HisenseEntity(CoordinatorEntity[HisenseDataUpdateCoordinator]):
-    """Base entity for one Hisense device."""
+    """Base entity with refrigerator-specific offline handling.
+
+    Refrigerators retain cached values after cloud read failures and become
+    unavailable when explicitly offline. Their connectivity, refresh, and
+    timestamp entities can opt out. Other devices use coordinator availability.
+    """
 
     _attr_has_entity_name = True
+
+    #: Keep the entity available when the device or the cloud is unreachable.
+    _attr_available_offline: bool = False
 
     def __init__(
         self,
@@ -40,6 +48,15 @@ class HisenseEntity(CoordinatorEntity[HisenseDataUpdateCoordinator]):
     def client(self) -> HiSenseAC | HiSenseDryer | HiSenseFridge | HiSenseWasher:
         """Return the device API client."""
         return self.coordinator.client
+
+    @property
+    def available(self) -> bool:
+        """Use the refrigerator online flag or standard coordinator availability."""
+        if self.coordinator.device_type != "冰箱":
+            return super().available
+        if self._attr_available_offline:
+            return True
+        return self.status.get("online") is not False
 
     @property
     def status(self) -> dict[str, Any]:

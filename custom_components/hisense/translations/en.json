@@ -71,6 +71,9 @@
       },
       "prompt_sound": {
         "name": "Prompt sound"
+      },
+      "fridge_degerming": {
+        "name": "Degerming + odor removal"
       }
     },
     "button": {
@@ -84,17 +87,44 @@
       },
       "climate_max_temp": {
         "name": "Thermostat max temperature"
+      },
+      "fridge_refrigerator_target_temperature": {
+        "name": "Set temperature - Refrigerator"
+      },
+      "fridge_freezer_target_temperature": {
+        "name": "Set temperature - Freezer"
+      }
+    },
+    "select": {
+      "fridge_work_mode_select": {
+        "name": "Setting - Work mode",
+        "state": {
+          "智能": "Smart",
+          "速冷": "Quick cooling",
+          "自定义": "Custom"
+        }
+      },
+      "fridge_variation_mode_select": {
+        "name": "Setting - Variation drawer",
+        "state": {
+          "原鲜": "Original fresh",
+          "0℃养鲜": "0°C fresh",
+          "母婴": "Baby care"
+        }
       }
     },
     "sensor": {
       "fridge_refrigerator_temperature": {
-        "name": "Refrigerator temperature"
+        "name": "Temperature - Refrigerator (actual)"
       },
       "fridge_freezer_temperature": {
-        "name": "Freezer temperature"
+        "name": "Temperature - Freezer (actual)"
       },
-      "fridge_ambient_temperature": {
-        "name": "Ambient temperature"
+      "fridge_variation_mode": {
+        "name": "Mode - Variation drawer"
+      },
+      "fridge_work_mode": {
+        "name": "Mode - Work mode"
       },
       "today_energy": {
         "name": "Today's energy"
@@ -202,9 +232,69 @@
       },
       "dryer_fault": {
         "name": "Fault code"
+      },
+      "fridge_compressor_frequency": {
+        "name": "Compressor frequency"
+      },
+      "fridge_refrigerator_display_temperature": {
+        "name": "Temperature - Refrigerator (effective)"
+      },
+      "fridge_freezer_display_temperature": {
+        "name": "Temperature - Freezer (effective)"
+      },
+      "fridge_data_updated": {
+        "name": "Last data update"
       }
     },
     "binary_sensor": {
+      "fridge_alarm_refriOpenDoorAlarm": {
+        "name": "Alarm - Refrigerator door open"
+      },
+      "fridge_alarm_freezeOpenDoorAlarm": {
+        "name": "Alarm - Freezer door open"
+      },
+      "fridge_alarm_variaOpenDoorAlarm": {
+        "name": "Alarm - Variation drawer door open"
+      },
+      "fridge_alarm_wideOpenDoorAlarm": {
+        "name": "Alarm - Wide compartment door open"
+      },
+      "fridge_alarm_refriLeftOpenDoorAlarm": {
+        "name": "Alarm - Refrigerator door ajar"
+      },
+      "fridge_alarm_freezeLeftOpenDoorAlarm": {
+        "name": "Alarm - Freezer door ajar"
+      },
+      "fridge_alarm_freezeOverTempAlarm": {
+        "name": "Alarm - Freezer over temperature"
+      },
+      "fridge_alarm_variaOverTempAlarm": {
+        "name": "Alarm - Variation drawer over temperature"
+      },
+      "fridge_alarm_wideOverTempAlarm": {
+        "name": "Alarm - Wide compartment over temperature"
+      },
+      "fridge_alarm_refriOverTempAlarm": {
+        "name": "Alarm - Refrigerator over temperature"
+      },
+      "fridge_alarm_refriOverTempAlarm_high": {
+        "name": "Alarm - Refrigerator over temperature (high)"
+      },
+      "fridge_alarm_refriOverTempAlarm_low": {
+        "name": "Alarm - Refrigerator over temperature (low)"
+      },
+      "fridge_alarm_iceMakerWaterLackAlarm": {
+        "name": "Alarm - Ice maker water tank empty"
+      },
+      "fridge_alarm_hydropeniaAlarm": {
+        "name": "Alarm - Water shortage"
+      },
+      "fridge_alarm_mildOdorAlarm": {
+        "name": "Alarm - Mild odor"
+      },
+      "fridge_alarm_severeOdorAlarm": {
+        "name": "Alarm - Severe odor"
+      },
       "washer_power": {
         "name": "Power"
       },
@@ -222,6 +312,18 @@
       },
       "dryer_child_lock": {
         "name": "Child lock"
+      },
+      "fridge_connectivity": {
+        "name": "Connectivity"
+      },
+      "fridge_power": {
+        "name": "Power"
+      },
+      "fridge_degerming_active": {
+        "name": "Degerming running"
+      },
+      "fridge_cleaner": {
+        "name": "Odor removal"
       }
     }
   }
