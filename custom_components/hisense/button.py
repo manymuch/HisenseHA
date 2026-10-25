@@ -18,7 +18,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
 class HisenseACUpdateButton(HisenseEntity, ButtonEntity):
     _attr_translation_key = "force_update"
 
-    #: 手动恢复按钮在设备离线/断网时仍需可按，这是唯一的自救入口。
+    #: Keep the refrigerator refresh button usable while the device is offline.
     _attr_available_offline = True
 
     def __init__(self, coordinator):

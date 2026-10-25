@@ -75,28 +75,6 @@ _WASHER_DRY_SETTING_LABELS = {
 _WASHER_STATES_TEMPERATURE_VALUES = (20, 30, 40, 60, 95)
 
 
-# ---------------------------------------------------------------------------
-# 冰箱（AIHome）常量
-#
-# 命令名与参数键名来自微信小程序真实抓包（设备 BCD-516WD1FPA-EQ51），
-# 全部实测返回 SUCCESS。命名规律：
-#   connector.device.command.<能力名>[.<子功能后缀>]
-# 详见 docs/冰箱开发指南.md 与 custom_components/hisense/fridge_const.py。
-# ---------------------------------------------------------------------------
-
-#: 冷藏室设定温度（带区域后缀，扁平驼峰参数键）
-_FRIDGE_CMD_SET_REFRIGERATOR_TEMPERATURE = SET_REFRIGERATOR_TEMPERATURE
-#: 冷冻室设定温度
-_FRIDGE_CMD_SET_FREEZE_TEMPERATURE = SET_FREEZE_TEMPERATURE
-#: 变温空间档位
-_FRIDGE_CMD_SET_VARIATION_TEMP_SPACE_DRAWER = SET_VARIATION_TEMP_SPACE_DRAWER
-#: DBD 除菌启停（无 Set 前缀）
-_FRIDGE_CMD_DBD_DEGERMING = DBD_DEGERMING
-
-#: 预设模式 → (command, 参数键)。本机仅实现 智能 / 速冷 两种。
-#: 定义在 :mod:`fridge_const`，与告警键同为单一来源。
-_FRIDGE_MODE_COMMANDS = WORK_MODE_COMMANDS
-
 #: 模式别名 → 内部名（兼容中文标签与旧 API 的整数编码）
 _FRIDGE_MODE_ALIASES = {
     "smart": "SMART",
@@ -109,10 +87,6 @@ _FRIDGE_MODE_ALIASES = {
     "速冷模式": "QUICK_COOLING",
     "65": "QUICK_COOLING",
 }
-
-#: 变温空间取值 → 语义（layout 的 modelCombFunction.subFunction）
-#: 定义在 :mod:`fridge_const`，与其 ``VARIATION_TEMP_SPACE_VALUES`` 同源。
-_FRIDGE_VARIATION_MODE_NAMES = VARIATION_TEMP_SPACE_VALUES
 
 #: 变温空间别名 → 数值（兼容中文标签与旧 API 英文名）
 _FRIDGE_VARIATION_MODE_ALIASES = {
@@ -130,66 +104,6 @@ _FRIDGE_VARIATION_MODE_ALIASES = {
     "infant": 2,
 }
 
-#: 温度设定范围（由 getHomepageConfig 的 attribute.value 确证）
-_FRIDGE_REFRIGERATOR_TEMP_MIN = REFRIGERATOR_SET_TEMP_MIN
-_FRIDGE_REFRIGERATOR_TEMP_MAX = REFRIGERATOR_SET_TEMP_MAX
-_FRIDGE_FREEZE_TEMP_MIN = FREEZE_SET_TEMP_MIN
-_FRIDGE_FREEZE_TEMP_MAX = FREEZE_SET_TEMP_MAX
-
-#: 冰箱告警键（detail 的 states 里，"0"=正常 / "1"=异常 / "--"=机型不支持）。
-#: 定义在 :mod:`fridge_const` 里，作为命令/状态字典的单一来源。
-#: 逐项都做成 problem 二进制传感器，且**一律先建出来**：
-#:   "--"       → 记入 ``unsupported_alarms``，实体 unavailable 并由实体层写入
-#:                注册表禁用（机型确实没有这个功能）
-#:   键不存在   → 记入 ``missing_alarms``，只 unavailable，不禁用（下次完整
-#:                响应即恢复）
-_FRIDGE_ALARM_KEYS = tuple(FRIDGE_ALARM_CODES)
-
-#: 冰箱故障键（"1" = 故障）
-_FRIDGE_FAULT_STATES = (
-    "wifiModuleFault",
-    "iceMakerFault",
-    "odorSensorFault",
-    "waterTankInstFault",
-    "humiSensorFault",
-    "tempSensorFault",
-    "rightFreezeSensorFault",
-    "wineSensorFault",
-    "refriSensorFault",
-    "freezeSensorFault",
-    "variaSensorFault",
-    "wideSensorFault",
-    "condensationFanFault",
-    "refriFanFault",
-    "freezeFanFault",
-    "variaFanFault",
-    "wideFanFault",
-    "refriEvaporatorSensorFault",
-    "freezeEvaporatorSensorFault",
-    "variaEvaporatorSensorFault",
-    "wideEvaporatorSensorFault",
-    "dryWetDrawerSensorFault",
-    "variaTempDrawerSensorFault",
-    "iceInletPipeSensorFault",
-    "iceSensorFailure",
-    "iceTempSensorFailure",
-    "ambientLightSensorError",
-    "refriDamperFault",
-    "electricValveSwitchFreezeFault",
-    "electricValveSwitchRefriFault",
-    "freezeCapillaryCloggingFault",
-    "refriCapillaryCloggingFault",
-    "freezeDefrostingHeaterFault",
-    "duraTempSensorError",
-    "rxFailure",
-    "txFailure",
-    "frzDoorSensorError",
-    "frzDoorSensorFault",
-    "refDoorSensorError",
-    "refDoorSensorFault",
-)
-
-
 def _normalize_fridge_mode(mode_id):
     """Map a mode identifier (name/label/legacy int) to SMART / QUICK_COOLING."""
     if mode_id is None:
@@ -205,11 +119,11 @@ def _normalize_variation_mode(mode_id):
         return None
     if isinstance(mode_id, (int, float)):
         value = int(mode_id)
-        return value if value in _FRIDGE_VARIATION_MODE_NAMES else None
+        return value if value in VARIATION_TEMP_SPACE_VALUES else None
     key = str(mode_id).strip()
     if key.isdigit() or (key.startswith("-") and key[1:].isdigit()):
         value = int(key)
-        return value if value in _FRIDGE_VARIATION_MODE_NAMES else None
+        return value if value in VARIATION_TEMP_SPACE_VALUES else None
     return _FRIDGE_VARIATION_MODE_ALIASES.get(key.lower())
 
 
@@ -1619,7 +1533,7 @@ class HiSenseFridge(_HiSenseDevice):
             # 变温空间
             "variation_mode_id": variation,
             "variation_mode": (
-                _FRIDGE_VARIATION_MODE_NAMES.get(variation)
+                VARIATION_TEMP_SPACE_VALUES.get(variation)
                 if variation is not None
                 else None
             ),
@@ -1639,7 +1553,7 @@ class HiSenseFridge(_HiSenseDevice):
         alarm_states = {}
         unsupported_alarms = []
         missing_alarms = []
-        for code in _FRIDGE_ALARM_KEYS:
+        for code in FRIDGE_ALARM_CODES:
             raw = states.get(code)
             if raw == "1":
                 alarm_states[code] = True
@@ -1651,20 +1565,9 @@ class HiSenseFridge(_HiSenseDevice):
             else:
                 # 键缺失 → 只是这次没读到，下一次完整响应就会恢复
                 missing_alarms.append(code)
-        active_alarms = [code for code, on in alarm_states.items() if on]
         updates["alarm_states"] = alarm_states
         updates["unsupported_alarms"] = unsupported_alarms
         updates["missing_alarms"] = missing_alarms
-        updates["active_alarms"] = active_alarms
-        updates["alarm"] = bool(active_alarms)
-
-        # 故障：任一故障键为 "1" 即认为有故障
-        faults = [
-            code for code in _FRIDGE_FAULT_STATES if states.get(code) == "1"
-        ]
-        updates["fault"] = bool(faults)
-        updates["active_faults"] = faults
-
         updates = {key: v for key, v in updates.items() if v is not None}
         self.status.update(updates)
         return set(updates)
@@ -1677,11 +1580,11 @@ class HiSenseFridge(_HiSenseDevice):
         """Set the refrigerator (fridge) compartment target temperature."""
         temperature = self._clamp(
             temperature,
-            _FRIDGE_REFRIGERATOR_TEMP_MIN,
-            _FRIDGE_REFRIGERATOR_TEMP_MAX,
+            REFRIGERATOR_SET_TEMP_MIN,
+            REFRIGERATOR_SET_TEMP_MAX,
         )
         ok = await self._send_aihome_action(
-            _FRIDGE_CMD_SET_REFRIGERATOR_TEMPERATURE,
+            SET_REFRIGERATOR_TEMPERATURE,
             {PARAM_REFRIGERATOR_SET_TEMPERATURE: {"value": temperature}},
         )
         if ok:
@@ -1703,10 +1606,10 @@ class HiSenseFridge(_HiSenseDevice):
         temperature, so we must not clear that bit here.
         """
         temperature = self._clamp(
-            temperature, _FRIDGE_FREEZE_TEMP_MIN, _FRIDGE_FREEZE_TEMP_MAX
+            temperature, FREEZE_SET_TEMP_MIN, FREEZE_SET_TEMP_MAX
         )
         ok = await self._send_aihome_action(
-            _FRIDGE_CMD_SET_FREEZE_TEMPERATURE,
+            SET_FREEZE_TEMPERATURE,
             {PARAM_FREEZE_SET_TEMPERATURE: {"value": temperature}},
         )
         if ok:
@@ -1737,7 +1640,7 @@ class HiSenseFridge(_HiSenseDevice):
         if mode is None:
             _LOGGER.warning("Hisense fridge: unknown work mode %r", mode_id)
             return False
-        command, param = _FRIDGE_MODE_COMMANDS[mode]
+        command, param = WORK_MODE_COMMANDS[mode]
         value = MODE_SWITCH_ON if enable else MODE_SWITCH_OFF
         ok = await self._send_aihome_action(command, {param: {"value": value}})
         if ok:
@@ -1797,7 +1700,7 @@ class HiSenseFridge(_HiSenseDevice):
         """
         value = "1" if enabled else "0"
         ok = await self._send_aihome_action(
-            _FRIDGE_CMD_DBD_DEGERMING,
+            DBD_DEGERMING,
             {PARAM_DBD_DEGERMING: {"value": value}},
         )
         if ok:
@@ -1815,14 +1718,14 @@ class HiSenseFridge(_HiSenseDevice):
             _LOGGER.warning("Hisense fridge: unknown variation mode %r", mode_id)
             return False
         ok = await self._send_aihome_action(
-            _FRIDGE_CMD_SET_VARIATION_TEMP_SPACE_DRAWER,
+            SET_VARIATION_TEMP_SPACE_DRAWER,
             {PARAM_VARIATION_TEMP_SPACE_DRAWER: {"value": value}},
         )
         if ok:
             self._set_pending_status(
                 {
                     "variation_mode_id": value,
-                    "variation_mode": _FRIDGE_VARIATION_MODE_NAMES.get(value),
+                    "variation_mode": VARIATION_TEMP_SPACE_VALUES.get(value),
                 }
             )
         return ok
