@@ -1,12 +1,34 @@
-from collections import Counter
-from copy import deepcopy
+import asyncio
 import base64
+from collections import Counter
 import hashlib
 import json
-import time
 import logging
+import time
+import uuid
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+from .fridge_const import (
+    DBD_DEGERMING,
+    FREEZE_SET_TEMP_MAX,
+    FREEZE_SET_TEMP_MIN,
+    FRIDGE_ALARM_CODES,
+    MODE_SWITCH_OFF,
+    MODE_SWITCH_ON,
+    PARAM_DBD_DEGERMING,
+    PARAM_FREEZE_SET_TEMPERATURE,
+    PARAM_REFRIGERATOR_SET_TEMPERATURE,
+    PARAM_VARIATION_TEMP_SPACE_DRAWER,
+    REFRIGERATOR_SET_TEMP_MAX,
+    REFRIGERATOR_SET_TEMP_MIN,
+    SET_FREEZE_TEMPERATURE,
+    SET_REFRIGERATOR_TEMPERATURE,
+    SET_VARIATION_TEMP_SPACE_DRAWER,
+    UNSUPPORTED_ALARM_VALUE,
+    VARIATION_TEMP_SPACE_VALUES,
+    WORK_MODE_COMMANDS,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -14,315 +36,1186 @@ _PORTAL_APP_KEY = "commonweb"
 _PORTAL_APP_SECRET = "MORZRbkuiWxjp+SM4vR_GxY4pZxLZ6rn"
 _PORTAL_AES_IV = _PORTAL_APP_SECRET[:16].encode("ascii")
 
+WASHER_PHASE_LABELS = {
+    0: "standby",
+    1: "reservation_wait",
+    2: "soaking",
+    3: "prewash",
+    4: "main_wash",
+    5: "rinse",
+    6: "spin",
+    7: "complete",
+    8: "drying",
+    9: "air_dry",
+    10: "fresh_care",
+}
+_WASHER_MIN_STATUS_VALUES = 101
+_WASHER_TEMPERATURE_LABELS = {
+    0: "ambient",
+    2: "temperature_20_c",
+    3: "temperature_30_c",
+    4: "temperature_40_c",
+    6: "temperature_60_c",
+    9: "temperature_95_c",
+}
+_WASHER_DRY_SETTING_LABELS = {
+    0: "off",
+    1: "ready_to_wear",
+    2: "ironing",
+    3: "storage",
+    4: "timed_dry_level_1",
+    5: "timed_dry_level_2",
+    6: "timed_dry_level_3",
+    7: "timed_dry_level_4",
+    8: "timed_dry_level_5",
+    9: "timed_dry_level_6",
+}
+# The named-states format reports the actual wash temperature in degrees
+# Celsius instead of the numbered index used by the legacy array format.
+_WASHER_STATES_TEMPERATURE_VALUES = (20, 30, 40, 60, 95)
 
-def _portal_encrypt(value: str) -> str:
-    """Encrypt a portal login field as the current account web client does."""
-    raw = value.encode("utf-8")
-    padding = 16 - (len(raw) % 16)
-    padded = raw + bytes([padding]) * padding
-    cipher = Cipher(
-        algorithms.AES(_PORTAL_APP_SECRET.encode("ascii")),
-        modes.CBC(_PORTAL_AES_IV),
-    )
-    encryptor = cipher.encryptor()
-    encrypted = encryptor.update(padded) + encryptor.finalize()
-    return base64.b64encode(encrypted).decode("ascii")
 
+#: 模式别名 → 内部名（兼容中文标签与旧 API 的整数编码）
+_FRIDGE_MODE_ALIASES = {
+    "smart": "SMART",
+    "智能": "SMART",
+    "智能模式": "SMART",
+    "64": "SMART",
+    "quick_cooling": "QUICK_COOLING",
+    "quickcooling": "QUICK_COOLING",
+    "速冷": "QUICK_COOLING",
+    "速冷模式": "QUICK_COOLING",
+    "65": "QUICK_COOLING",
+}
 
-def _portal_sign(body: str) -> str:
-    """Create X-Sign-For as Base64(MD5(body + portal app secret))."""
-    digest = hashlib.md5(
-        (body + _PORTAL_APP_SECRET).encode("utf-8"), usedforsecurity=False
-    ).digest()
-    return base64.b64encode(digest).decode("ascii")
+#: 变温空间别名 → 数值（兼容中文标签与旧 API 英文名）
+_FRIDGE_VARIATION_MODE_ALIASES = {
+    "原鲜": 0,
+    "originalfresh1": 0,
+    "original_fresh": 0,
+    "0°养鲜": 1,
+    "0℃养鲜": 1,
+    "0度养鲜": 1,
+    "freshfood1": 1,
+    "fresh_food": 1,
+    "zero_c_fresh": 1,
+    "母婴": 2,
+    "infant1": 2,
+    "infant": 2,
+}
 
-_STATUS_SWING_MODES = {0, 1, 2, 3}
-_MIN_STATUS_VALUES = 210
-_MIN_FRIDGE_STATUS_VALUES = 130
-
-
-def _device_type_from_name(device_type_name) -> str | None:
-    if not isinstance(device_type_name, str):
+def _normalize_fridge_mode(mode_id):
+    """Map a mode identifier (name/label/legacy int) to SMART / QUICK_COOLING."""
+    if mode_id is None:
         return None
-    if "空调" in device_type_name:
-        return "空调"
-    if "冰箱" in device_type_name:
-        return "冰箱"
-    return None
+    if isinstance(mode_id, (int, float)):
+        mode_id = str(int(mode_id))
+    return _FRIDGE_MODE_ALIASES.get(str(mode_id).strip().lower())
 
 
-def _device_text(value) -> str:
-    return value.strip() if isinstance(value, str) else ""
+def _normalize_variation_mode(mode_id):
+    """Map a variation-drawer identifier to its numeric AIHome value."""
+    if mode_id is None:
+        return None
+    if isinstance(mode_id, (int, float)):
+        value = int(mode_id)
+        return value if value in VARIATION_TEMP_SPACE_VALUES else None
+    key = str(mode_id).strip()
+    if key.isdigit() or (key.startswith("-") and key[1:].isdigit()):
+        value = int(key)
+        return value if value in VARIATION_TEMP_SPACE_VALUES else None
+    return _FRIDGE_VARIATION_MODE_ALIASES.get(key.lower())
 
-
-def _device_select_label(device: dict, device_id: str) -> str:
-    room = _device_text(device.get("roomName"))
-    nick = _device_text(device.get("deviceNickName"))
-    if room and nick:
-        return f"{room}-{nick}"
-    if room:
-        return room
-    if nick:
-        return nick
-    device_name = _device_text(device.get("deviceName"))
-    if device_name:
-        return device_name
-    return device_id
 
 
 class HiSenseLogin:
     def __init__(self, session):
         self.session = session
-    
-    def get_timestamp(self):
-        return int(time.time() * 1000)
+        self.customer_id = ""
 
     async def login(self, username, password):
-        timestamp = self.get_timestamp()
-        url = 'https://portal-account.hismarttv.com/mobile/se/signon'
-        data = {
-            'loginName': _portal_encrypt(username),
-            'signature': _portal_encrypt(password),
-            'serverCode': '9501',
-            'distributeId': '2001',
-            'termType': 2,
+        body_data = {
+            "loginName": _HiSenseDevice._encrypt(username),
+            "signature": _HiSenseDevice._encrypt(password),
+            "serverCode": "9501",
+            "distributeId": "2001",
+            "termType": 2,
         }
-        body = json.dumps(data, separators=(',', ':'), ensure_ascii=False)
-        headers = {
-            'Content-Type': 'application/json; charset=UTF-8',
-            'appKey': _PORTAL_APP_KEY,
-            'X-Sign-For': _portal_sign(body),
-        }
+        body = json.dumps(body_data, separators=(",", ":"), ensure_ascii=False)
         params = {
-            'lastUpdateTime': '0',
-            'version': '1.0',
-            'deviceType': '2',
-            'appType': '100',
-            'versionCode': '101',
-            'adaptertRank': '720',
-            '_': str(timestamp),
+            "lastUpdateTime": "0",
+            "version": "1.0",
+            "deviceType": "2",
+            "appType": "100",
+            "versionCode": "101",
+            "adaptertRank": "720",
+            "_": str(_HiSenseDevice._timestamp()),
+        }
+        headers = {
+            "Content-Type": "application/json; charset=UTF-8",
+            "appKey": _PORTAL_APP_KEY,
+            "X-Sign-For": _HiSenseDevice._sign(body),
         }
         async with self.session.post(
-            url, headers=headers, data=body, params=params
+            "https://portal-account.hismarttv.com/mobile/se/signon",
+            headers=headers,
+            data=body,
+            params=params,
         ) as response:
             result = await response.json()
-            result_code = (result.get("data") or {}).get("resultCode")
-            if result_code == 0:
-                token_info = (result.get("data") or {}).get("tokenInfo") or {}
-                access_token = token_info.get("token")
-                refresh_token = token_info.get("refreshToken")
-                if access_token and refresh_token:
-                    return access_token, refresh_token
+
+        data = result.get("data") or {}
+        if data.get("resultCode") != 0:
+            return None
+        token_info = data.get("tokenInfo") or {}
+        access_token = token_info.get("token")
+        refresh_token = token_info.get("refreshToken")
+        customer_id = (
+            token_info.get("customerId")
+            or data.get("customerId")
+            or result.get("customerId")
+        )
+        if not access_token or not customer_id:
+            return None
+        self.customer_id = str(customer_id)
+        return str(access_token), refresh_token, self.customer_id
+
+    async def get_home_select_options(self, access_token, customer_id=None):
+        customer_id = str(customer_id or self.customer_id)
+        body = await _HiSenseDevice._post(
+            self.session, access_token, customer_id, "/4.0/iot/home/list", {}
+        )
+        if not _HiSenseDevice._success(body):
+            return None
+        homes = (body.get("payload") or {}).get("homes") or []
+        options = {}
+        for home in homes:
+            home_id = home.get("id") or home.get("homeId")
+            if not home_id:
+                continue
+            name = (home.get("name") or home.get("homeName") or "").strip()
+            options[str(home_id)] = name or str(home_id)
+        return options
+
+    async def get_all_devices(
+        self, access_token, home_id, refresh_token, customer_id=None
+    ):
+        customer_id = str(customer_id or self.customer_id)
+        body = await _HiSenseDevice._post(
+            self.session,
+            access_token,
+            customer_id,
+            "/4.0/iot/devices/list",
+            {"homeId": str(home_id)},
+        )
+        if not _HiSenseDevice._success(body):
             return None
 
-    async def get_home_select_options(self, access_token):
-        """Return mapping home_id -> display name for config flow UI."""
-        timestamp = self.get_timestamp()
-        url='https://api-wg.hismarttv.com/wg/dm/getHomeList'
-        
-        headers = {
-                'Host': 'api.wg.hismarttv.com',
-                'Connection': 'Keep-Alive',
-                'Accept-Encoding': 'gzip',
-                'User-Agent': 'okhttp/4.10.0',
+        devices = {}
+        raw_labels = {}
+        for device in (body.get("payload") or {}).get("devices") or []:
+            if not isinstance(device, dict):
+                continue
+            device_id = str(device.get("deviceId") or "")
+            device_type = _device_type(device)
+            if not device_id or device_type is None:
+                continue
+            partner = device.get("partner") or {}
+            partner_id = str(
+                partner.get("id") or device.get("partnerId") or "1001"
+            )
+            product = device.get("product") or {}
+            device_name = str(
+                device.get("deviceName")
+                or device.get("name")
+                or product.get("name")
+                or ""
+            ).strip()
+            label = device_name or device_id
+            raw_labels[device_id] = label
+            devices[device_id] = {
+                "device_id": device_id,
+                "wifi_id": str(device.get("wifiId") or ""),
+                "home_id": str(home_id),
+                "refresh_token": refresh_token,
+                "access_token": str(access_token),
+                "customer_id": customer_id,
+                "partner_id": partner_id,
+                "device_type": device_type,
+                "device_type_name": str(
+                    device.get("deviceTypeName")
+                    or product.get("name")
+                    or device.get("categoryCode")
+                    or device_type
+                ),
+                "device_name": device_name,
+                "device_code": str(
+                    device.get("deviceCode") or product.get("code") or ""
+                ),
+                "label": label,
             }
-        params = {
-            'sign': '',
-            'languageId': '0',
-            'version': '8.0',
-            'accessToken': access_token,   
-            'timezone':'28800',
-            'format': '1',
-            'timeStamp': str(timestamp),
-        }
-        async with self.session.get(url, headers=headers, params=params) as response:
-            result = await response.json()
-            result_code = result["response"]["resultCode"]
-            if result_code == 0:
-                home_list = result["response"]["homeList"]
-                options = {}
-                for home in home_list:
-                    hid = home["homeId"]
-                    name = (home.get("homeName") or "").strip()
-                    options[hid] = name if name else hid
-                return options
-            else:
-                return None
+
+        counts = Counter(raw_labels.values())
+        for device_id, label in raw_labels.items():
+            if counts[label] > 1:
+                devices[device_id]["label"] = f"{label} ({device_id[-6:]})"
+        return devices
 
     async def get_device_wifi_id_and_labels(
-        self, access_token, home_id, device_keywords="空调"
+        self, access_token, home_id, device_keywords="空调", customer_id=None
     ):
-        """Return (device_id -> wifi_id, device_id -> UI label) for filtered devices."""
-        timestamp = self.get_timestamp()
-        url='https://api-wg.hismarttv.com/wg/dm/getHomeDeviceList'
-        headers = {
-                'Host': 'api-wg.hismarttv.com',
-                'Connection': 'Keep-Alive',
-                'Accept-Encoding': 'gzip',
-                'User-Agent': 'okhttp/4.10.0',
+        devices = await self.get_all_devices(
+            access_token, home_id, None, customer_id
+        )
+        if devices is None:
+            return None
+        selected = {
+            device_id: info
+            for device_id, info in devices.items()
+            if device_keywords in info.get("device_type_name", "")
+            or device_keywords in info.get("device_type", "")
+        }
+        return (
+            {device_id: info.get("wifi_id", "") for device_id, info in selected.items()},
+            {device_id: info.get("label", device_id) for device_id, info in selected.items()},
+        )
+
+
+def _device_type_from_name(device_type_name) -> str | None:
+    if not isinstance(device_type_name, str):
+        return None
+    text = device_type_name.lower()
+    if "aircondition" in text or "air_condition" in text or "空调" in text:
+        return "空调"
+    if "refrigerat" in text or "fridge" in text or "冰箱" in text:
+        return "冰箱"
+    if "washer" in text or "washing" in text or "洗衣" in text:
+        return "洗衣机"
+    if "dryer" in text or "干衣" in text or "烘干" in text:
+        return "干衣机"
+    return None
+
+
+def _device_type(device: dict) -> str | None:
+    product = device.get("product") or {}
+    device_type = _device_type_from_name(
+        " ".join(
+            str(value or "")
+            for value in (
+                device.get("categoryCode"),
+                device.get("deviceTypeName"),
+                product.get("name"),
+                product.get("code"),
+            )
+        )
+    )
+    return device_type
+
+
+def _as_int(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_number(value):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return int(number) if number.is_integer() else number
+
+
+def _as_bool(value):
+    if isinstance(value, str):
+        return value.lower() in {"1", "true", "on"}
+    return bool(value)
+
+
+class _HiSenseDevice:
+    BASE_URL = "https://iot-aihome.hismarttv.com"
+    READ_SOURCE_TYPE = 3
+    CONTROL_APP_VERSION = "6.2.18.7"
+    CONTROL_SOURCE_TYPE = 20
+    CONTROL_SOURCE_NAME = "smartlifeAppH5"
+    POWER_SOURCE_NAME = "smartlifeApp"
+    LABEL_BATCH_SAVE_PATH = "/4.0/iot/devices/label/batchSave"
+    BUZZER_SOUND_LABEL = "buzzer_sound"
+    PENDING_CONTROL_TTL = 8.0
+    ENERGY_TODAY_PATH = "/4.0/smartHome/databoard/aircondition/todayenergy"
+
+    @staticmethod
+    def _encrypt(value: str) -> str:
+        raw = value.encode("utf-8")
+        padding = 16 - len(raw) % 16
+        cipher = Cipher(
+            algorithms.AES(_PORTAL_APP_SECRET.encode("ascii")),
+            modes.CBC(_PORTAL_AES_IV),
+        )
+        encryptor = cipher.encryptor()
+        encrypted = encryptor.update(raw + bytes([padding]) * padding)
+        return base64.b64encode(encrypted + encryptor.finalize()).decode("ascii")
+
+    @staticmethod
+    def _sign(body: str) -> str:
+        digest = hashlib.md5(
+            (body + _PORTAL_APP_SECRET).encode("utf-8"), usedforsecurity=False
+        ).digest()
+        return base64.b64encode(digest).decode("ascii")
+
+    @staticmethod
+    def _timestamp() -> int:
+        return int(time.time() * 1000)
+
+    @staticmethod
+    def _stringify(value):
+        if isinstance(value, dict):
+            return {
+                str(key): _HiSenseDevice._stringify(item)
+                for key, item in value.items()
             }
-        params = {
-            'sign': '',
-            'languageId': '0',
-            'version': '8.0',
-            'accessToken': access_token,   
-            'homeId': home_id,
-            'timezone':'28800',
-            'format': '1',
-            'timeStamp': str(timestamp),
+        if isinstance(value, list):
+            return [_HiSenseDevice._stringify(item) for item in value]
+        if isinstance(value, (bool, int, float)):
+            return str(value)
+        return value
+
+    @classmethod
+    def _action(cls, command: str, params: dict) -> dict:
+        if not isinstance(command, str) or not command:
+            raise ValueError("AIHome action command must be a non-empty string")
+        if not isinstance(params, dict) or not params:
+            raise ValueError("AIHome action params must be a non-empty mapping")
+        return {"command": command, "params": cls._stringify(params)}
+
+    @classmethod
+    def _request_body(
+        cls,
+        access_token: str,
+        customer_id: str,
+        payload,
+        *,
+        execute=False,
+        device_id="",
+        partner_id="1001",
+        source_name=None,
+    ) -> str:
+        if execute:
+            if not isinstance(payload, list) or not payload:
+                raise ValueError("AIHome execute actions must be a non-empty list")
+            body = {
+                "appVersion": cls.CONTROL_APP_VERSION,
+                "payload": {
+                    "exclusionFlag": 1,
+                    "sourceType": cls.CONTROL_SOURCE_TYPE,
+                    "customerId": str(customer_id),
+                    "partnerId": str(partner_id),
+                    "deviceId": str(device_id),
+                    "actions": payload,
+                },
+                "appType": 1,
+                "header": {"messageId": str(uuid.uuid4())},
+                "sourceName": source_name or cls.CONTROL_SOURCE_NAME,
+                "accessToken": access_token,
+            }
+        else:
+            body = {
+                "lastUpdateTime": 0,
+                "accessToken": access_token,
+                "appVersion": "",
+                "openId": "",
+                "version": "1.0",
+                "deviceType": 2,
+                "appType": 100,
+                "versionCode": "101",
+                "adaptertRank": 720,
+                "_": cls._timestamp(),
+                "header": {"messageId": str(uuid.uuid4())},
+                "payload": {
+                    "customerId": str(customer_id),
+                    "sourceType": cls.READ_SOURCE_TYPE,
+                    **payload,
+                },
+            }
+        return json.dumps(body, separators=(",", ":"), ensure_ascii=False)
+
+    @classmethod
+    def _headers(cls, body: str) -> dict[str, str]:
+        return {
+            "Content-Type": "application/json; charset=UTF-8",
+            "Accept": "application/json",
+            "User-Agent": "okhttp/4.10.0",
+            "appKey": _PORTAL_APP_KEY,
+            "X-Sign-For": cls._sign(body),
         }
-        async with self.session.get(url, headers=headers, params=params) as response:
+
+    @staticmethod
+    def _success(body: dict) -> bool:
+        return (
+            isinstance(body, dict)
+            and body.get("httpCode") not in (401, 403)
+            and (body.get("payload") or {}).get("status") == "SUCCESS"
+        )
+
+    @classmethod
+    async def _post(
+        cls,
+        session,
+        access_token: str,
+        customer_id: str,
+        path: str,
+        payload,
+        *,
+        execute=False,
+        device_id="",
+        partner_id="1001",
+        source_name=None,
+    ) -> dict:
+        body = cls._request_body(
+            access_token,
+            customer_id,
+            payload,
+            execute=execute,
+            device_id=device_id,
+            partner_id=partner_id,
+            source_name=source_name,
+        )
+        return await cls._post_raw(session, path, body)
+
+    @classmethod
+    async def _post_raw(cls, session, path: str, body: str) -> dict:
+        async with session.post(
+            f"{cls.BASE_URL}{path}",
+            headers=cls._headers(body),
+            data=body,
+        ) as response:
             result = await response.json()
-            result_code = result["response"]["resultCode"]
-            if result_code == 0:
-                device_list = result["response"]["deviceList"]
-                device_wifi_id_dict = {}
-                raw_labels = {}
-                for device in device_list:
-                    device_type_name = device["deviceTypeName"]
-                    if device_keywords in device_type_name:
-                        did = device["deviceId"]
-                        device_wifi_id_dict[did] = device["wifiId"]
-                        raw_labels[did] = _device_select_label(device, did)
-                label_counts = Counter(raw_labels.values())
-                device_id_to_label = {}
-                for did, base in raw_labels.items():
-                    if label_counts[base] > 1:
-                        suffix = did[-6:] if len(did) >= 6 else did
-                        device_id_to_label[did] = f"{base} ({suffix})"
-                    else:
-                        device_id_to_label[did] = base
-                return device_wifi_id_dict, device_id_to_label
-            else:
-                return None
+            if getattr(response, "status", None) in (401, 403) and isinstance(result, dict):
+                return {**result, "httpCode": response.status}
+            return result
 
-    async def get_all_devices(self, access_token, home_id, refresh_token):
-        """Return all supported devices (空调 and 冰箱) with type info."""
-        timestamp = self.get_timestamp()
-        url = 'https://api-wg.hismarttv.com/wg/dm/getHomeDeviceList'
-        headers = {
-            'Host': 'api-wg.hismarttv.com',
-            'Connection': 'Keep-Alive',
-            'Accept-Encoding': 'gzip',
-            'User-Agent': 'okhttp/4.10.0',
+    @classmethod
+    async def _post_parameters(cls, session, path: str, parameters: dict) -> dict:
+        """Post the flat parameter body used by the dashboard endpoints."""
+        body = json.dumps(parameters, separators=(",", ":"), ensure_ascii=False)
+        return await cls._post_raw(session, path, body)
+
+    @classmethod
+    def _label_request_body(
+        cls,
+        access_token: str,
+        device_id: str,
+        partner_id: str,
+        label_key: str,
+        label_value,
+    ) -> str:
+        body = {
+            "accessToken": access_token,
+            "deviceId": str(device_id),
+            "header": {
+                "languageId": 0,
+                "messageId": str(uuid.uuid4()),
+                "timestamp": cls._timestamp(),
+            },
+            "appVersion": cls.CONTROL_APP_VERSION,
+            "payload": {
+                "labels": [
+                    {
+                        "partnerId": str(partner_id),
+                        "devId": str(device_id),
+                        "labelKey": str(label_key),
+                        "labelValue": str(label_value),
+                    }
+                ]
+            },
         }
-        params = {
-            'sign': '',
-            'languageId': '0',
-            'version': '8.0',
-            'accessToken': access_token,
-            'homeId': home_id,
-            'timezone': '28800',
-            'format': '1',
-            'timeStamp': str(timestamp),
-        }
-        async with self.session.get(url, headers=headers, params=params) as response:
-            result = await response.json()
-            if not isinstance(result, dict):
-                return None
-            response_obj = result.get("response")
-            if not isinstance(response_obj, dict) or response_obj.get("resultCode") != 0:
-                return None
-            device_list = response_obj.get("deviceList")
-            if not isinstance(device_list, list):
-                return None
-            devices = {}
-            raw_labels = {}
-            for device in device_list:
-                if not isinstance(device, dict):
-                    continue
-                device_type_name = device.get("deviceTypeName")
-                device_type = _device_type_from_name(device_type_name)
-                did = device.get("deviceId")
-                wifi_id = device.get("wifiId")
-                if (
-                    device_type is None
-                    or not isinstance(did, str)
-                    or not did
-                    or not isinstance(wifi_id, str)
-                    or not wifi_id
-                ):
-                    continue
-                label = _device_select_label(device, did)
-                raw_labels[did] = label
-                devices[did] = {
-                    "device_id": did,
-                    "wifi_id": wifi_id,
-                    "refresh_token": refresh_token,
-                    "device_type": device_type,
-                    "device_type_name": device_type_name,
-                    "device_name": _device_text(device.get("deviceName")),
-                    "device_code": _device_text(device.get("deviceCode")),
-                    "label": label,
-                }
-                    
-            label_counts = Counter(raw_labels.values())
-            for did, base in raw_labels.items():
-                if label_counts[base] > 1:
-                    suffix = did[-6:] if len(did) >= 6 else did
-                    devices[did]["label"] = f"{base} ({suffix})"
-                
-            return devices
+        return json.dumps(body, separators=(",", ":"), ensure_ascii=False)
 
-
-class HiSenseAC:
-    def __init__(self, wifi_id, device_id, refresh_token, session, device_name="", entity_name=""):
+    def __init__(
+        self,
+        wifi_id,
+        device_id,
+        refresh_token,
+        session,
+        device_name="",
+        entity_name="",
+        *,
+        home_id="",
+        access_token=None,
+        customer_id="",
+        partner_id="1001",
+        username="",
+        password="",
+        on_token_refresh=None,
+        token_lock=None,
+    ):
         self.wifi_id = wifi_id
         self.device_id = device_id
+        self.home_id = str(home_id or "")
         self.refresh_token = refresh_token
-        self.access_token = None
+        self.access_token = access_token
+        self.customer_id = str(customer_id or "")
+        self.partner_id = str(partner_id or "1001")
+        self.username = username
+        self.password = password
         self.session = session
         self.device_name = device_name
         self.entity_name = entity_name
-        app_name_encoding = "%E6%B5%B7%E4%BF%A1%E6%99%BA%E6%85%A7%E5%AE%B6"
-        # app_name = "海信智慧家"
-        # app_name_encoding = urllib.parse.quote(app_name)
-        self.headers = {
-            'Host': 'api-wg.hismarttv.com',
-            'Content-Type': 'application/json',
-            'Connection': 'keep-alive',
-            'Accept': '*/*',
-            'User-Agent': f"{app_name_encoding}/4 CFNetwork/1492.0.1 Darwin/23.3.0",
-            'Accept-Language': 'zh-CN,zh-Hans;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
+        self.status = {}
+        self._pending_status = {}
+        self._on_token_refresh = on_token_refresh
+        self.on_auth_failure = None
+        self._token_lock = token_lock or asyncio.Lock()
+
+    def _notify_auth_failure(self) -> None:
+        """Start status recovery after an authenticated control is rejected."""
+        if self.on_auth_failure:
+            self.on_auth_failure()
+
+    async def refresh(self, *, force=False, previous_token=None):
+        """Sign in through the AIHome account service when needed."""
+        if self.access_token and not force:
+            return True
+        if not self.username or not self.password:
+            return False
+        async with self._token_lock:
+            if previous_token is not None and self.access_token != previous_token:
+                return True
+            try:
+                tokens = await HiSenseLogin(self.session).login(
+                    self.username, self.password
+                )
+            except Exception:
+                _LOGGER.warning("Hisense AIHome sign-in request failed", exc_info=True)
+                return False
+            if not tokens:
+                _LOGGER.warning("Hisense AIHome sign-in was rejected")
+                return False
+            self.access_token, self.refresh_token, self.customer_id = tokens
+            if self._on_token_refresh:
+                self._on_token_refresh(
+                    self.access_token, self.refresh_token, self.customer_id
+                )
+            return True
+
+    @staticmethod
+    def _auth_failure(body) -> bool:
+        if not isinstance(body, dict):
+            return False
+        payload = body.get("payload") if isinstance(body.get("payload"), dict) else {}
+        response = body.get("response") if isinstance(body.get("response"), dict) else {}
+        fields = (body, payload, response)
+        codes = {
+            str(node[key]).lower()
+            for node in fields
+            for key in ("errorCode", "resultCode", "httpCode")
+            if node.get(key) is not None
         }
-        self.refresh_headers = {
-            'Host': 'bas-wg.hismarttv.com',
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Connection': 'keep-alive',
-            'Accept': '*/*',
-            'User-Agent': f"{app_name_encoding}/4 CFNetwork/1492.0.1 Darwin/23.3.0",
-            'Accept-Language': 'zh-CN,zh-Hans;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br'
+        if codes & {"401", "403"}:
+            return True
+        reason = " ".join(
+            str(node.get(key, ""))
+            for node in fields
+            for key in ("status", "errorCode", "errorDesc", "message", "desc")
+        ).lower()
+        return any(
+            word in reason
+            for word in ("token", "unauthoriz", "authentication", "登录过期", "令牌", "鉴权")
+        )
+
+    async def _send_aihome_action(self, command, params, *, source_name=None):
+        if not await self.refresh():
+            return False
+        action = self._action(command, params)
+        for attempt in range(2):
+            request_token = self.access_token
+            try:
+                result = await self._post(
+                    self.session, request_token, self.customer_id,
+                    "/4.0/iot/devices/execute", [action], execute=True,
+                    device_id=self.device_id, partner_id=self.partner_id,
+                    source_name=source_name,
+                )
+            except Exception:
+                _LOGGER.error("Hisense AIHome control request failed", exc_info=True)
+                return False
+            if self._success(result):
+                return True
+            if (
+                attempt == 0
+                and self._auth_failure(result)
+                and await self.refresh(force=True, previous_token=request_token)
+            ):
+                continue
+            if self._auth_failure(result):
+                self._notify_auth_failure()
+            _LOGGER.warning(
+                "Hisense AIHome control failed: %s",
+                self._response_summary(result),
+            )
+            return False
+        return False
+
+    async def _send_aihome_label(self, label_key: str, label_value) -> bool:
+        if not await self.refresh():
+            return False
+        for attempt in range(2):
+            request_token = self.access_token
+            body = self._label_request_body(
+                request_token, self.device_id, self.partner_id,
+                label_key, label_value,
+            )
+            try:
+                result = await self._post_raw(
+                    self.session, self.LABEL_BATCH_SAVE_PATH, body,
+                )
+            except Exception:
+                _LOGGER.error("Hisense AIHome label request failed", exc_info=True)
+                return False
+            if self._success(result) or self._label_success(result):
+                return True
+            if (
+                attempt == 0
+                and self._auth_failure(result)
+                and await self.refresh(force=True, previous_token=request_token)
+            ):
+                continue
+            if self._auth_failure(result):
+                self._notify_auth_failure()
+            _LOGGER.warning(
+                "Hisense AIHome label update failed: %s",
+                self._response_summary(result),
+            )
+            return False
+        return False
+
+    def _response_summary(self, body) -> dict:
+        """Return a safe failure summary without tokens or signatures."""
+        if not isinstance(body, dict):
+            return {"response_type": type(body).__name__}
+        payload = body.get("payload")
+        if not isinstance(payload, dict):
+            payload = {}
+        response = body.get("response")
+        if not isinstance(response, dict):
+            response = {}
+        error_desc = payload.get("errorDesc") or response.get("desc") or body.get("desc")
+        if error_desc is not None:
+            error_desc = str(error_desc)[:300]
+            for secret in (self.access_token, self.refresh_token):
+                if secret:
+                    error_desc = error_desc.replace(str(secret), "[redacted]")
+        return {
+            "status": payload.get("status"),
+            "httpCode": body.get("httpCode"),
+            "errorCode": (
+                payload.get("errorCode")
+                or response.get("resultCode")
+                or body.get("resultCode")
+            ),
+            "errorDesc": error_desc,
         }
-        self.url_head = "https://api-wg.hismarttv.com/agw/dsg/outer"
-        self.power_url = f"{self.url_head}/sendDeviceModelCmd?accessToken="
-        self.command_url = f"{self.url_head}/uploadRemoteLogicCmd?accessToken="
-        self.check_url = f"{self.url_head}/getDeviceLogicalStatusArray?accessToken="
-        self.refresh_url = "https://bas-wg.hismarttv.com/aaa/refresh_token2"
-        self.power_data_template = {
-            "wifiId": wifi_id,
-            "deviceId": device_id,
-            "extendParam": "1",
-            "cmdVersion": "0",
+
+    @staticmethod
+    def _label_success(body: dict) -> bool:
+        if not isinstance(body, dict):
+            return False
+        result_code = body.get("resultCode")
+        if result_code in (0, "0"):
+            return True
+        payload = body.get("payload") or {}
+        return payload.get("resultCode") in (0, "0")
+
+    @staticmethod
+    def _detail_states(result):
+        """Return the named states map from a device detail response."""
+        if not isinstance(result, dict):
+            return None
+        payload = result.get("payload")
+        payload = payload if isinstance(payload, dict) else {}
+        device = payload.get("device")
+        device = device if isinstance(device, dict) else {}
+        states = device.get("states") or payload.get("states")
+        return states if isinstance(states, dict) and states else None
+
+    def _store_states(self, updates: dict, states: dict) -> None:
+        """Store parsed state updates and refresh the protocol debug fields."""
+        canonical = ",".join(f"{key}={states[key]}" for key in sorted(states))
+        self.status.update(updates)
+        self.status.update(
+            {
+                "protocol_payload_length": len(states),
+                "protocol_payload_sha256": hashlib.sha256(
+                    canonical.encode()
+                ).hexdigest(),
+                "protocol_raw_values": [],
+                "protocol_changed_indices": [],
+                "protocol_nonzero_values": {
+                    key: value
+                    for key, value in states.items()
+                    if value not in ("0", "--", "")
+                },
+            }
+        )
+
+    async def check_status(self):
+        if not await self.refresh():
+            return None
+        try:
+            result = await self._post(
+                self.session, self.access_token, self.customer_id,
+                "/4.0/iot/devices/detail",
+                {"deviceId": str(self.device_id), "partnerId": str(self.partner_id)},
+            )
+        except Exception:
+            _LOGGER.error("Hisense AIHome status request failed", exc_info=True)
+            return None
+        if not self._success(result):
+            _LOGGER.warning("Hisense AIHome status failed: %s", self._response_summary(result))
+            return None
+        payload = result.get("payload") or {}
+        device = payload.get("device") or {}
+        states = device.get("states") or payload.get("states") or {}
+        if not isinstance(states, dict):
+            return None
+        fresh_keys = self._update_from_states(states) or set()
+        if self._update_prompt_sound_from_detail(result):
+            fresh_keys.add("prompt_sound")
+        self._reconcile_pending_status(fresh_keys)
+        return self.get_status()
+
+    def _update_from_states(self, states: dict):
+        updates = {
+            key: states[key]
+            for key in ("onlineStatus", "powerStatus")
+            if key in states
         }
-        self.check_data_template = {
-            "deviceList": [
-                {
-                    "wifiId": wifi_id,
-                    "deviceId": device_id,
-                }
-            ]
+        self.status.update(updates)
+        return set(updates)
+
+    def _update_status_from_aihome(self, detail: dict):
+        states = detail.get("states") or {}
+        if not isinstance(states, dict):
+            return False
+        fresh_keys = self._update_from_states(states) or set()
+        if self._update_prompt_sound_from_detail(detail):
+            fresh_keys.add("prompt_sound")
+        self._reconcile_pending_status(fresh_keys)
+        return True
+
+    @classmethod
+    def _find_label_value(cls, node, label_key: str):
+        if isinstance(node, dict):
+            if node.get("labelKey") == label_key:
+                return node.get("labelValue")
+            # The device detail API uses key/value, while label writes use
+            # labelKey/labelValue.
+            if node.get("key") == label_key:
+                return node.get("value")
+            for value in node.values():
+                found = cls._find_label_value(value, label_key)
+                if found is not None:
+                    return found
+        elif isinstance(node, list):
+            for value in node:
+                found = cls._find_label_value(value, label_key)
+                if found is not None:
+                    return found
+        return None
+
+    def _update_prompt_sound_from_detail(self, detail: dict) -> bool:
+        label_value = self._find_label_value(detail, self.BUZZER_SOUND_LABEL)
+        if label_value is None:
+            return False
+        self.status["prompt_sound"] = _as_bool(label_value)
+        return True
+
+    def _reconcile_pending_status(self, fresh_keys):
+        now = time.monotonic()
+        for key, (expected, expires_at) in list(self._pending_status.items()):
+            if key not in fresh_keys:
+                if now < expires_at:
+                    self.status[key] = expected
+                else:
+                    self._pending_status.pop(key, None)
+            elif self.status.get(key) == expected:
+                self._pending_status.pop(key, None)
+            elif now >= expires_at:
+                self._pending_status.pop(key, None)
+            else:
+                self.status[key] = expected
+
+    def _set_pending_status(self, updates: dict):
+        expires_at = time.monotonic() + self.PENDING_CONTROL_TTL
+        self.status.update(updates)
+        for key, value in updates.items():
+            self._pending_status[key] = (value, expires_at)
+
+    def get_status(self):
+        return dict(self.status)
+
+    @staticmethod
+    def _energy_data(body: dict) -> dict:
+        """Unwrap both the native bridge and direct server response shapes."""
+        node = body
+        energy_keys = {
+            "todayEnergy",
+            "runTime",
         }
-        self.command_data_template = {
-            "wifiId": wifi_id,
-            "deviceId": device_id,
-            "extendParm": "1",
-            "cmdVersion": "1684085201",
+        for _ in range(4):
+            if not isinstance(node, dict):
+                return {}
+            if energy_keys.intersection(node):
+                return node
+            next_node = node.get("data")
+            if not isinstance(next_node, dict):
+                next_node = node.get("payload")
+            if not isinstance(next_node, dict):
+                return {}
+            node = next_node
+        return {}
+
+    async def refresh_energy(self):
+        """Read today's AC energy and accumulated runtime."""
+        if not await self.refresh() or not self.home_id:
+            return None
+
+        parameters = {
+            "accessToken": self.access_token,
+            "deviceId": str(self.device_id),
+            "homeId": self.home_id,
+            "partnerId": str(self.partner_id),
+            "wifiId": str(self.wifi_id),
         }
+        try:
+            today_body = await self._post_parameters(
+                self.session, self.ENERGY_TODAY_PATH, parameters
+            )
+        except Exception:
+            _LOGGER.error("Hisense AIHome energy request failed", exc_info=True)
+            return None
+
+        today_data = self._energy_data(today_body)
+        values = {
+            "today_energy": _as_number(today_data.get("todayEnergy")),
+            "run_time": _as_number(today_data.get("runTime")),
+        }
+        if not any(value is not None for value in values.values()):
+            _LOGGER.warning("Hisense AIHome energy response did not contain data")
+            return None
+
+        self.status.update(
+            {key: value for key, value in values.items() if value is not None}
+        )
+        return self.get_status()
+
+
+class HiSenseWasher(_HiSenseDevice):
+    """Read-only AIHome client for Hisense washers."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.status = {
-            "power_on": False,
+            "protocol_payload_length": 0,
+            "protocol_payload_sha256": "",
+            "protocol_raw_values": [],
+            "protocol_changed_indices": [],
+            "protocol_nonzero_values": {},
         }
+
+    @classmethod
+    def _status_success(cls, result) -> bool:
+        if cls._success(result):
+            return True
+        if not isinstance(result, dict):
+            return False
+        if result.get("httpCode") in (401, 403):
+            return False
+        payload = result.get("payload")
+        if isinstance(payload, dict) and "status" in payload:
+            return False
+        response = result.get("response")
+        return isinstance(response, dict) and isinstance(
+            response.get("deviceStatusList"), list
+        )
+
+    @classmethod
+    def _extract_status_values(cls, result) -> list[int]:
+        if not isinstance(result, dict):
+            raise ValueError("missing response object")
+
+        payload = result.get("payload") or {}
+        raw_status = payload.get("deviceStatus") if isinstance(payload, dict) else None
+        if raw_status is None:
+            response = result.get("response") or {}
+            status_list = (
+                response.get("deviceStatusList")
+                if isinstance(response, dict)
+                else None
+            )
+            if isinstance(status_list, list) and status_list:
+                first_status = status_list[0]
+                if isinstance(first_status, dict):
+                    raw_status = first_status.get("deviceStatus")
+
+        if isinstance(raw_status, str):
+            values = [int(value.strip()) for value in raw_status.split(",")]
+        elif isinstance(raw_status, list):
+            values = [int(value) for value in raw_status]
+        else:
+            raise ValueError("missing deviceStatus")
+
+        if len(values) < _WASHER_MIN_STATUS_VALUES:
+            raise ValueError(
+                f"washer status has {len(values)} values; expected at least "
+                f"{_WASHER_MIN_STATUS_VALUES}"
+            )
+        return values
+
+    def _update_status_from_result(self, result) -> bool:
+        try:
+            values = self._extract_status_values(result)
+        except (TypeError, ValueError):
+            _LOGGER.error("Failed to parse Hisense washer status", exc_info=True)
+            return False
+
+        previous = self.status.get("protocol_raw_values", [])
+        changed = (
+            [
+                index
+                for index in range(max(len(previous), len(values)))
+                if (previous[index] if index < len(previous) else None)
+                != (values[index] if index < len(values) else None)
+            ]
+            if previous
+            else []
+        )
+        canonical = ",".join(str(value) for value in values)
+        phase = values[11]
+        power_on = values[9] == 1
+        run_state = values[8]
+        if not power_on:
+            machine_state = "off"
+        elif phase == 7:
+            machine_state = "complete"
+        elif run_state == 1:
+            machine_state = "running"
+        elif run_state == 0 and phase == 0:
+            machine_state = "standby"
+        elif run_state == 0:
+            machine_state = "paused"
+        else:
+            machine_state = f"unknown_{run_state}"
+
+        self.status = {
+            "machine_state": machine_state,
+            "run_state": run_state,
+            "power_on": power_on,
+            "phase": phase,
+            "phase_label": WASHER_PHASE_LABELS.get(phase, f"unknown_{phase}"),
+            "program": values[12],
+            "remaining_minutes": values[28] * 256 + values[29],
+            "gate_locked": values[6] == 1,
+            "fault": values[27],
+            "motor_speed": values[13] * 256 + values[14],
+            "temperature_raw": values[15],
+            "configured_spin": values[37] * 100,
+            "configured_temperature": _WASHER_TEMPERATURE_LABELS.get(
+                values[38], f"unknown_{values[38]}"
+            ),
+            "child_lock": values[100] == 1,
+            "dry_setting": _WASHER_DRY_SETTING_LABELS.get(
+                values[80], f"unknown_{values[80]}"
+            ),
+            "protocol_payload_length": len(values),
+            "protocol_payload_sha256": hashlib.sha256(
+                canonical.encode()
+            ).hexdigest(),
+            "protocol_raw_values": values,
+            "protocol_changed_indices": changed,
+            "protocol_nonzero_values": {
+                str(index): value
+                for index, value in enumerate(values)
+                if value != 0
+            },
+        }
+        _LOGGER.debug(
+            "Hisense washer status: length=%s sha256=%s changed_indices=%s",
+            len(values),
+            self.status["protocol_payload_sha256"],
+            changed,
+        )
+        return True
+
+    def _update_from_states(self, states: dict):
+        """Parse the named AIHome states map reported by newer washers."""
+
+        def _flag(key):
+            value = states.get(key)
+            if value is None or value == "--":
+                return None
+            return _as_bool(value)
+
+        power_on = _flag("powerStatus")
+        run_state = _as_int(states.get("runStatus"))
+        paused = _flag("startPauseStatus")
+        if power_on is None:
+            machine_state = None
+        elif not power_on:
+            machine_state = "off"
+        elif paused:
+            machine_state = "paused"
+        elif run_state == 1:
+            machine_state = "running"
+        elif run_state == 0:
+            machine_state = "standby"
+        else:
+            machine_state = f"unknown_{run_state}"
+
+        temperature = _as_int(states.get("washTemperature"))
+        dry_value = _as_int(states.get("dry"))
+        door = states.get("doorLockStatus")
+        updates = {
+            "machine_state": machine_state,
+            "run_state": run_state,
+            "power_on": power_on,
+            "program": _as_int(states.get("workMode")),
+            "remaining_minutes": _as_int(states.get("remainRunTime")),
+            "fault": _as_int(states.get("fault")),
+            "motor_speed": _as_int(states.get("rotarySpeed")),
+            "temperature_raw": temperature,
+            "configured_spin": _as_int(states.get("dehydrationSpeed")),
+            "configured_temperature": (
+                (
+                    "ambient"
+                    if temperature == 0
+                    else f"temperature_{temperature}_c"
+                    if temperature in _WASHER_STATES_TEMPERATURE_VALUES
+                    else f"unknown_{temperature}"
+                )
+                if temperature is not None
+                else None
+            ),
+            "dry_setting": (
+                _WASHER_DRY_SETTING_LABELS.get(dry_value, f"unknown_{dry_value}")
+                if dry_value is not None
+                else None
+            ),
+            "gate_locked": None if door in (None, "--") else str(door) == "1",
+            "child_lock": _flag("childLock"),
+        }
+        updates = {key: value for key, value in updates.items() if value is not None}
+        self._store_states(updates, states)
+        return set(updates)
+
+    async def check_status(self):
+        if not await self.refresh():
+            return None
+        try:
+            result = await self._post(
+                self.session, self.access_token, self.customer_id,
+                "/4.0/iot/devices/detail",
+                {"deviceId": str(self.device_id), "partnerId": str(self.partner_id)},
+            )
+        except Exception:
+            _LOGGER.error("Hisense AIHome washer status request failed", exc_info=True)
+            return None
+        states = self._detail_states(result)
+        if states is not None:
+            self._update_from_states(states)
+            return self.get_status()
+        if not self._status_success(result):
+            _LOGGER.warning("Hisense AIHome washer status failed: %s", self._response_summary(result))
+            return None
+        if not self._update_status_from_result(result):
+            return None
+        return self.get_status()
+
+    async def _send_aihome_action(self, command, params, *, source_name=None):
+        """Keep washer support read-only even if an inherited method is called."""
+        return False
+
+    async def _send_aihome_label(self, label_key: str, label_value) -> bool:
+        """Keep washer support read-only even if an inherited method is called."""
+        return False
+
+    def get_status(self):
+        return json.loads(json.dumps(self.status))
+
+
+class HiSenseDryer(_HiSenseDevice):
+    """Read-only AIHome client for Hisense dryers."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.status = {
+            "protocol_payload_length": 0,
+            "protocol_payload_sha256": "",
+            "protocol_raw_values": [],
+            "protocol_changed_indices": [],
+            "protocol_nonzero_values": {},
+        }
+
+    def _update_from_states(self, states: dict):
+        """Parse the named AIHome states map reported by Hisense dryers."""
+
+        def _flag(key):
+            value = states.get(key)
+            if value is None or value == "--":
+                return None
+            return _as_bool(value)
+
+        power_on = _flag("powerStatus")
+        run_state = _as_int(states.get("runStatus"))
+        paused = _flag("startPauseStatus")
+        if power_on is None:
+            machine_state = None
+        elif not power_on:
+            machine_state = "off"
+        elif paused:
+            machine_state = "paused"
+        elif run_state == 1:
+            machine_state = "running"
+        elif run_state == 0:
+            machine_state = "standby"
+        else:
+            machine_state = f"unknown_{run_state}"
+
+        method = states.get("dryingMethod")
+        door = states.get("doorLockStatus")
+        updates = {
+            "machine_state": machine_state,
+            "run_state": run_state,
+            "power_on": power_on,
+            "program": _as_int(states.get("workMode")),
+            "remaining_minutes": _as_int(states.get("remainRunTime")),
+            "dry_level": _as_int(states.get("dryLevel")),
+            "dry_temperature": _as_int(states.get("dryTemperature")),
+            "drying_method": None if method in (None, "--") else str(method),
+            "fault": _as_int(states.get("fault")),
+            "gate_locked": None if door in (None, "--") else str(door) == "1",
+            "child_lock": _flag("childLock"),
+        }
+        updates = {key: value for key, value in updates.items() if value is not None}
+        self._store_states(updates, states)
+        return set(updates)
+
+    async def _send_aihome_action(self, command, params, *, source_name=None):
+        """Keep dryer support read-only even if an inherited method is called."""
+        return False
+
+    async def _send_aihome_label(self, label_key: str, label_value) -> bool:
+        """Keep dryer support read-only even if an inherited method is called."""
+        return False
+
+    def get_status(self):
+        return json.loads(json.dumps(self.status))
+
+
+class HiSenseAC(_HiSenseDevice):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.hvac_mode_lookup = {
             0: "FAN_ONLY",
             1: "HEAT",
@@ -331,7 +1224,6 @@ class HiSenseAC:
             4: "AUTO",
         }
         self.fan_mode_lookup = {
-            0: "AUTO",
             1: "DIFFUSE",
             2: "LOW",
             3: "MEDIUM",
@@ -340,450 +1232,509 @@ class HiSenseAC:
         self.climate_min_temp = 16
         self.climate_max_temp = 32
 
-    async def _send_command(self, url, command_data, status_required=True):
-        post_url = f"{url}{self.access_token}"
-        try:
-            async with self.session.post(
-                post_url,
-                headers=self.headers,
-                json=command_data,
-            ) as response:
-                result = await response.json()
-        except Exception:
-            _LOGGER.error("Hisense request failed", exc_info=True)
-            return False
-
-        if not isinstance(result, dict):
-            _LOGGER.error("Hisense response is not an object: %s", result)
-            return False
-
-        response_obj = result.get("response")
-        if not isinstance(response_obj, dict):
-            _LOGGER.error("Hisense response missing response object: %s", result)
-            return False
-
-        result_code = response_obj.get("resultCode")
-        if result_code != 0:
-            _LOGGER.warning("Hisense request failed with resultCode=%s", result_code)
-            return False
-
-        if not status_required:
-            try:
-                self._extract_status_payload(result)
-            except ValueError:
-                _LOGGER.debug("Hisense response accepted without status payload")
-                return None
-
-        if self._update_status_from_result(result):
-            return True
-
-        if not status_required:
-            return None
-
-        _LOGGER.error("Hisense response did not include a usable status payload")
-        return False
-
-    async def _robust_send_command(self, url, command_data, status_required=True):
-        result = await self._send_command(url, command_data, status_required)
-        if result is not False:
-            return result
-        _LOGGER.info("Attempting to refresh token and retry command")
-        if not await self.refresh():
-            _LOGGER.error("Failed to refresh token")
-            return False
-        return await self._send_command(url, command_data, status_required)
-
-    def _extract_status_payload(self, result):
-        if not isinstance(result, dict):
-            raise ValueError("response is not an object")
-        response = result.get("response")
-        if not isinstance(response, dict):
-            raise ValueError("missing response object")
-
-        pre_status = response.get("preStatus")
-        if isinstance(pre_status, str) and pre_status:
-            return pre_status
-
-        status_list = response.get("deviceStatusList")
-        if isinstance(status_list, list) and status_list:
-            first_status = status_list[0]
-            if isinstance(first_status, dict):
-                device_status = first_status.get("deviceStatus")
-                if isinstance(device_status, str) and device_status:
-                    return device_status
-
-        raise ValueError("missing status payload")
-
-    def _update_status_from_result(self, result):
-        try:
-            result_list_str = self._extract_status_payload(result)
-            result_list = [int(i.strip()) for i in result_list_str.split(",")]
-            if len(result_list) < _MIN_STATUS_VALUES:
-                raise ValueError(
-                    f"status payload has {len(result_list)} values, "
-                    f"expected at least {_MIN_STATUS_VALUES}"
-                )
-
-            fan_mode_id = result_list[0]
-            hvac_mode_id = result_list[4]
-            swing_mode_id = result_list[209]
-            if fan_mode_id not in self.fan_mode_lookup:
-                raise ValueError(f"unknown fan mode id {fan_mode_id}")
-            if hvac_mode_id not in self.hvac_mode_lookup:
-                raise ValueError(f"unknown hvac mode id {hvac_mode_id}")
-            if swing_mode_id not in _STATUS_SWING_MODES:
-                raise ValueError(f"unknown swing mode id {swing_mode_id}")
-
-            status = {
-                "desired_temperature": result_list[9],
-                "indoor_temperature": result_list[10],
-                "hvac_mode_id": hvac_mode_id,
-                "hvac_mode": self.hvac_mode_lookup[hvac_mode_id],
-                "fan_mode_id": fan_mode_id,
-                "fan_mode": self.fan_mode_lookup[fan_mode_id],
-                "screen_on": result_list[58] == 1,
-                "power_on": result_list[5] == 1,
-                "aux_heat": result_list[45] == 1,
-                "nature_wind": result_list[44] == 1,
-                "swing_mode_id": swing_mode_id,
-            }
-        except (IndexError, TypeError, ValueError):
-            _LOGGER.error("Failed to parse Hisense status response", exc_info=True)
-            return False
-
-        self.status.update(status)
-        return True
-
-    async def _send_command_and_update_status(self, url, command_data):
-        result = await self._robust_send_command(
-            url,
-            command_data,
-            status_required=False,
+    def _update_from_states(self, states: dict):
+        mode_id = _as_int(
+            states.get("modes", states.get("workMode", states.get("mode")))
         )
-        if result is True:
-            return True
-        if result is None:
-            return bool(await self.check_status())
-        return False
+        fan_id = None if _as_bool(states.get("autoWind")) else _as_int(states.get("windSpeed"))
+        status = {}
+        if "onlineStatus" in states:
+            status["onlineStatus"] = states["onlineStatus"]
+        if "powerStatus" in states:
+            status["power_on"] = _as_bool(states["powerStatus"])
+        if mode_id is not None:
+            status["hvac_mode_id"] = mode_id
+            status["hvac_mode"] = self.hvac_mode_lookup.get(mode_id)
+        desired_temperature = _as_number(
+            states.get("setTemperature", states.get("desiredTemperature"))
+        )
+        if desired_temperature is not None:
+            status["desired_temperature"] = desired_temperature
+        indoor_temperature = _as_number(
+            states.get("realTemperature", states.get("indoorTemperature"))
+        )
+        if indoor_temperature is not None:
+            status["indoor_temperature"] = indoor_temperature
+        if fan_id is not None:
+            status["fan_mode_id"] = fan_id
+            status["fan_mode"] = self.fan_mode_lookup.get(fan_id)
+        if "screenSwitch" in states:
+            status["screen_on"] = _as_bool(states["screenSwitch"])
+        if "heatSwitch" in states:
+            status["aux_heat"] = _as_bool(states["heatSwitch"])
+        if "natrueWind" in states or "natureWind" in states:
+            status["nature_wind"] = _as_bool(
+                states.get("natrueWind", states.get("natureWind"))
+            )
+        if "autoWind" in states:
+            status["auto_wind"] = _as_bool(states["autoWind"])
+        if "leftRightWind" in states:
+            status["left_right_wind"] = _as_int(states["leftRightWind"])
+        if "leftRightWindFullControl" in states:
+            status["left_right_wind_full_control"] = _as_bool(
+                states["leftRightWindFullControl"]
+            )
+        if "fastCoolHeatSwitch" in states:
+            status["fast_cool_heat"] = _as_bool(states["fastCoolHeatSwitch"])
+        status = {key: value for key, value in status.items() if value is not None}
+        self.status.update(status)
+        return set(status)
+
+    def _optimistic_control_update(self, command: str, params: dict):
+        updates = {}
+
+        def value_for(key):
+            value = params.get(key)
+            if isinstance(value, dict):
+                return value.get("value")
+            return value
+
+        if command == "connector.device.command.Power":
+            code = (params.get("onAndOff") or {}).get("code")
+            if code in ("On", "Off"):
+                updates["power_on"] = code == "On"
+        elif command == "connector.device.command.SetTemperature":
+            value = _as_number(value_for("setTemperature"))
+            if value is not None:
+                updates["desired_temperature"] = value
+        elif command == "connector.device.command.SetWindSpeed":
+            auto_wind = value_for("autoWind")
+            if auto_wind is not None:
+                updates["auto_wind"] = _as_bool(auto_wind)
+            wind_speed = _as_int(value_for("windSpeed"))
+            if wind_speed is not None:
+                updates["fan_mode_id"] = wind_speed
+                updates["fan_mode"] = self.fan_mode_lookup.get(wind_speed)
+        elif command == "connector.device.command.SetModes":
+            mode_id = _as_int(value_for("modes"))
+            if mode_id is not None:
+                updates["hvac_mode_id"] = mode_id
+                updates["hvac_mode"] = self.hvac_mode_lookup.get(mode_id)
+        elif command == "connector.device.command.SetScreenSwitch":
+            updates["screen_on"] = _as_bool(value_for("screenSwitch"))
+        elif command == "connector.device.command.SetHeatSwitch":
+            updates["aux_heat"] = _as_bool(value_for("heatSwitch"))
+        elif command == "connector.device.command.SetLeftRightWindFullControl":
+            updates["left_right_wind_full_control"] = _as_bool(
+                value_for("leftRightWindFullControl")
+            )
+        elif command == "connector.device.command.SetFastCoolHeatSwitch":
+            updates["fast_cool_heat"] = _as_bool(value_for("fastCoolHeatSwitch"))
+        elif command == "connector.device.command.SetNatrueWind":
+            updates["nature_wind"] = _as_bool(value_for("natrueWind"))
+
+        if updates:
+            self._set_pending_status(updates)
+
+    async def _control(self, command, params, *, source_name=None):
+        if source_name is None:
+            success = await self._send_aihome_action(command, params)
+        else:
+            success = await self._send_aihome_action(
+                command, params, source_name=source_name
+            )
+        if success:
+            self._optimistic_control_update(command, params)
+        return success
 
     async def turn_on(self):
-        command_data = deepcopy(self.power_data_template)
-        command_data["attributes"] = "{\"onAndOff\":\"On\"}"
-        return await self._send_command_and_update_status(self.power_url, command_data)
+        return await self._control(
+            "connector.device.command.Power",
+            {"onAndOff": {"code": "On"}},
+            source_name=self.POWER_SOURCE_NAME,
+        )
 
     async def turn_off(self):
-        command_data = deepcopy(self.power_data_template)
-        command_data["attributes"] = "{\"onAndOff\":\"Off\"}"
-        return await self._send_command_and_update_status(self.power_url, command_data)
+        return await self._control(
+            "connector.device.command.Power",
+            {"onAndOff": {"code": "Off"}},
+            source_name=self.POWER_SOURCE_NAME,
+        )
 
-    async def send_logic_command(self, id: int, param: int):
-        command_data = deepcopy(self.command_data_template)
-        command_data["cmdList"] = [
-            {"cmdId": id, "cmdOrder": 0, "cmdParm": param, "delayTime": 0}
-        ]
-        return await self._send_command_and_update_status(self.command_url, command_data)
+    async def set_temperature(self, temperature):
+        return await self._control(
+            "connector.device.command.SetTemperature",
+            {"setTemperature": {"value": temperature}},
+        )
+
+    async def set_fan_mode(self, fan_mode_id):
+        return await self._control(
+            "connector.device.command.SetWindSpeed",
+            {"windSpeed": fan_mode_id},
+        )
+
+    async def set_hvac_mode(self, mode_id):
+        return await self._control(
+            "connector.device.command.SetModes",
+            {"modes": {"value": mode_id}},
+        )
+
+    async def set_screen_switch(self, enabled):
+        return await self._control(
+            "connector.device.command.SetScreenSwitch",
+            {"screenSwitch": {"value": int(enabled)}},
+        )
+
+    async def set_heat_switch(self, enabled):
+        return await self._control(
+            "connector.device.command.SetHeatSwitch",
+            {"heatSwitch": {"value": int(enabled)}},
+        )
+
+    async def set_swing_mode(self, enabled: bool):
+        return await self._control(
+            "connector.device.command.SetLeftRightWindFullControl",
+            {"leftRightWindFullControl": {"value": int(enabled)}},
+        )
+
+    async def set_fast_cool_heat(self, enabled: bool):
+        return await self._control(
+            "connector.device.command.SetFastCoolHeatSwitch",
+            {"fastCoolHeatSwitch": {"value": int(enabled)}},
+        )
+
+    async def set_nature_wind(self, enabled: bool):
+        return await self._control(
+            "connector.device.command.SetNatrueWind",
+            {"natrueWind": {"value": int(enabled)}},
+        )
+
+    async def set_auto_wind(self, enabled: bool):
+        return await self._control(
+            "connector.device.command.SetWindSpeed",
+            {"autoWind": {"value": int(enabled)}},
+        )
+
+    async def set_prompt_sound(self, enabled: bool):
+        if not await self._send_aihome_label(
+            self.BUZZER_SOUND_LABEL,
+            int(enabled),
+        ):
+            return False
+        self._set_pending_status({"prompt_sound": bool(enabled)})
+        return True
+
+    async def get_energy(self):
+        return await self.refresh_energy()
+
+
+class HiSenseFridge(_HiSenseDevice):
+    """Hisense AIHome refrigerator: named-state reads and control commands.
+
+    State is read from the AIHome ``detail`` response ``states`` mapping by key
+    (never by parsing the legacy comma-separated status array). Control uses the
+    command/parameter names confirmed by a real mini-program capture; see
+    :mod:`custom_components.hisense.fridge_const`.
+    """
+
+    #: 状态键 → 内部状态字段（温度：设定 / 实际 / 显示 三种前缀严格区分）
+    _SET_TEMPERATURE_KEYS = (
+        "refrigeratorSetTemperature",
+        "setTemperature.refrigerator",
+    )
+    _FREEZE_SET_TEMPERATURE_KEYS = (
+        "freezeSetTemperature",
+        "setTemperature.freeze",
+    )
 
     async def check_status(self):
-        if await self._robust_send_command(self.check_url, self.check_data_template):
-            return self.get_status()
-        return None
-
-    def get_status(self):
-        return dict(self.status)
-
-    async def refresh(self):
-        refresh_data = {
-            'refreshToken': self.refresh_token,
-            'appKey': "1234567890",
-            'format': '1',
-        }
+        if not await self.refresh():
+            return None
         try:
-            async with self.session.post(self.refresh_url,
-                                         headers=self.refresh_headers,
-                                         data=refresh_data) as response:
-                result = await response.json()
-                if not isinstance(result, list) or not result:
-                    _LOGGER.error("Hisense token refresh returned unexpected body: %s", result)
-                    return False
-                token = result[0].get("token") if isinstance(result[0], dict) else None
-                if not token:
-                    _LOGGER.error("Hisense token refresh response did not include token")
-                    return False
-                self.access_token = token
-                _LOGGER.debug(f"Get access token: {self.access_token}")
-                return True
+            result = await self._post(
+                self.session, self.access_token, self.customer_id,
+                "/4.0/iot/devices/detail",
+                {"deviceId": str(self.device_id), "partnerId": str(self.partner_id)},
+            )
         except Exception:
-            _LOGGER.error("Failed to refresh token", exc_info=True)
-            return False
-
-
-class HiSenseFridge:
-    def __init__(self, wifi_id, device_id, refresh_token, session, device_name="", entity_name=""):
-        self.wifi_id = wifi_id
-        self.device_id = device_id
-        self.refresh_token = refresh_token
-        self.access_token = None
-        self.session = session
-        self.device_name = device_name
-        self.entity_name = entity_name
-        app_name_encoding = "%E6%B5%B7%E4%BF%A1%E6%99%BA%E6%85%A7%E5%AE%B6"
-        self.headers = {
-            'Host': 'api-wg.hismarttv.com',
-            'Content-Type': 'application/json',
-            'Connection': 'keep-alive',
-            'Accept': '*/*',
-            'User-Agent': f"{app_name_encoding}/4 CFNetwork/1492.0.1 Darwin/23.3.0",
-            'Accept-Language': 'zh-CN,zh-Hans;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-        }
-        self.refresh_headers = {
-            'Host': 'bas-wg.hismarttv.com',
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Connection': 'keep-alive',
-            'Accept': '*/*',
-            'User-Agent': f"{app_name_encoding}/4 CFNetwork/1492.0.1 Darwin/23.3.0",
-            'Accept-Language': 'zh-CN,zh-Hans;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br'
-        }
-        self.url_head = "https://api-wg.hismarttv.com/agw/dsg/outer"
-        self.power_url = f"{self.url_head}/sendDeviceModelCmd?accessToken="
-        self.command_url = f"{self.url_head}/uploadRemoteLogicCmd?accessToken="
-        self.check_url = f"{self.url_head}/getDeviceLogicalStatusArray?accessToken="
-        self.refresh_url = "https://bas-wg.hismarttv.com/aaa/refresh_token2"
-        self.power_data_template = {
-            "wifiId": wifi_id,
-            "deviceId": device_id,
-            "extendParam": "1",
-            "cmdVersion": "0",
-        }
-        self.check_data_template = {
-            "deviceList": [
-                {
-                    "wifiId": wifi_id,
-                    "deviceId": device_id,
-                }
-            ]
-        }
-        self.command_data_template = {
-            "wifiId": wifi_id,
-            "deviceId": device_id,
-            "extendParm": "1",
-            "cmdVersion": "1684085201",
-        }
-        self.status = {
-            "power_on": False,
-            "refrigerator_set_temperature": 5,
-            "freeze_set_temperature": -18,
-            "refrigerator_real_temperature": 5,
-            "freeze_real_temperature": -18,
-            "variation_real_temperature": 0,
-            "ambient_temperature": 25,
-            "work_mode_id": 0,
-            "work_mode": "自定义",
-            "variation_mode_id": 0,
-            "variation_mode": "NORMAL",
-        }
-        self.work_mode_lookup = {
-            0: "自定义",
-            64: "智能",
-            65: "速冷",
-        }
-        self.variation_mode_lookup = {
-            16: "原鲜",
-            32: "0℃养鲜",
-            64: "母婴",
-        }
-
-    async def _send_command(self, url, command_data, status_required=True):
-        post_url = f"{url}{self.access_token}"
-        try:
-            async with self.session.post(
-                post_url,
-                headers=self.headers,
-                json=command_data,
-            ) as response:
-                result = await response.json()
-        except Exception:
-            _LOGGER.error("Hisense fridge request failed", exc_info=True)
-            return False
-
-        if not isinstance(result, dict):
-            _LOGGER.error("Hisense fridge response is not an object: %s", result)
-            return False
-
-        response_obj = result.get("response")
-        if not isinstance(response_obj, dict):
-            _LOGGER.error("Hisense fridge response missing response object: %s", result)
-            return False
-
-        result_code = response_obj.get("resultCode")
-        if result_code != 0:
-            _LOGGER.warning("Hisense fridge request failed with resultCode=%s", result_code)
-            return False
-
-        if not status_required:
-            try:
-                self._extract_status_payload(result)
-            except ValueError:
-                _LOGGER.debug("Hisense fridge response accepted without status payload")
-                return None
-
-        if self._update_status_from_result(result):
-            return True
-
-        if not status_required:
+            _LOGGER.error("Hisense AIHome fridge status request failed", exc_info=True)
+            return None
+        if not self._success(result):
+            _LOGGER.warning(
+                "Hisense AIHome fridge status failed: %s",
+                self._response_summary(result),
+            )
             return None
 
-        _LOGGER.error("Hisense fridge response did not include a usable status payload")
-        return False
+        payload = result.get("payload") or {}
+        device = payload.get("device") or {}
+        states = device.get("states") or payload.get("states") or {}
+        if not isinstance(states, dict):
+            states = {}
+        # reportTime 是设备最后一次上报云端的时间（无时区的本地时间串）。
+        # 它不在 states 里、也不参与离线降级：设备离线时它停在旧值，
+        # 正好反映「手上这份数据有多旧」，所以无论在线离线都照常记录。
+        report_time = device.get("reportTime") or payload.get("reportTime")
+        if isinstance(report_time, str) and report_time:
+            self.status["report_time"] = report_time
+        fresh_keys = self._update_from_states(states) or set()
+        self._reconcile_pending_status(fresh_keys)
+        return self.get_status() if self.status else None
 
-    async def _robust_send_command(self, url, command_data, status_required=True):
-        result = await self._send_command(url, command_data, status_required)
-        if result is not False:
-            return result
-        _LOGGER.info("Attempting to refresh token and retry fridge command")
-        if not await self.refresh():
-            _LOGGER.error("Failed to refresh fridge token")
-            return False
-        return await self._send_command(url, command_data, status_required)
+    def _update_from_states(self, states: dict):
+        """Parse the named AIHome states map into internal status fields."""
 
-    def _extract_status_payload(self, result):
-        if not isinstance(result, dict):
-            raise ValueError("response is not an object")
-        response = result.get("response")
-        if not isinstance(response, dict):
-            raise ValueError("missing response object")
+        def value(*keys, default=None):
+            for key in keys:
+                if key in states:
+                    return states[key]
+            return default
 
-        pre_status = response.get("preStatus")
-        if isinstance(pre_status, str) and pre_status:
-            return pre_status
+        def number(*keys):
+            raw = value(*keys)
+            return None if raw in (None, "--") else _as_number(raw)
 
-        status_list = response.get("deviceStatusList")
-        if isinstance(status_list, list) and status_list:
-            first_status = status_list[0]
-            if isinstance(first_status, dict):
-                device_status = first_status.get("deviceStatus")
-                if isinstance(device_status, str) and device_status:
-                    return device_status
+        def flag(*keys):
+            raw = value(*keys)
+            return None if raw in (None, "--") else _as_bool(raw)
 
-        raise ValueError("missing status payload")
+        # 离线降级：设备离线时 detail 返回的是云端缓存，告警/故障位可能被写成
+        # "0"、部分键可能整段缺失、甚至全部变成 "--"。如果照常解析，会得出
+        # 「全部告警正常」「这些功能都不支持」两个错误结论，后者还会在重启后
+        # 把对应实体永久删掉。所以离线时只认 onlineStatus，其余字段保持上一次
+        # 在线时的值（实体侧统一置为 unavailable，不会把旧值当成现状展示）。
+        online = flag("onlineStatus")
+        if online is False:
+            self.status["online"] = False
+            return {"online"}
 
-    def _update_status_from_result(self, result):
-        try:
-            result_list_str = self._extract_status_payload(result)
-            result_list = [int(i.strip()) for i in result_list_str.split(",")]
-            if len(result_list) < _MIN_FRIDGE_STATUS_VALUES:
-                raise ValueError(
-                    f"status payload has {len(result_list)} values, "
-                    f"expected at least {_MIN_FRIDGE_STATUS_VALUES}"
-                )
+        variation = number("variationTempSpaceDrawer")
+        # 除菌：layout 第 18-21 栏把三个键列为同一功能的备选上报名，实测只有
+        # dBDDegerming 跟随 DBDDegerming 命令变化（1=运行中 / 0=停止），
+        # cleanerSwitch 开后不跟关，degermingSwitch 恒 0。所以实体只绑前者，
+        # 另两个保留原始值放属性备查。
+        degerming_bits = {
+            "degermingSwitch": flag("degermingSwitch"),
+            "cleanerSwitch": flag("cleanerSwitch"),
+            "dBDDegerming": flag("dBDDegerming"),
+        }
+        degerming_active = degerming_bits["dBDDegerming"]
+        updates = {
+            # 温度：设定值（number 可写）
+            "refrigerator_temperature": number(*self._SET_TEMPERATURE_KEYS),
+            "freezer_temperature": number(*self._FREEZE_SET_TEMPERATURE_KEYS),
+            # 温度：实际值（sensor 只读）
+            "refrigerator_real_temperature": number("refrigeratorRealTemperature"),
+            "freezer_real_temperature": number("freezeRealTemperature"),
+            # 温度：面板显示值（sensor 只读，诊断用）
+            "display_refrigerator_temperature": number(
+                "displayTemperature.refrigerator"
+            ),
+            "display_freezer_temperature": number("displayTemperature.freeze"),
+            # 开关 / 在线
+            "power_on": flag("refrigeratorOn"),
+            "online": flag("onlineStatus"),
+            # 压缩机频率（Hz）：0 = 停机，是"到底有没有在制冷"的直接证据
+            "compressor_frequency": number("compressorFrequency"),
+            # 模式：用布尔位（跨机型稳定）。workMode 总编码本机是 0/3/--，
+            # 旧固件是 64/65，编码不统一，不用于读状态。
+            "smart_mode": flag("workMode.Smart"),
+            "quick_cooling_mode": flag("workMode.QuickCooling"),
+            # 变温空间
+            "variation_mode_id": variation,
+            "variation_mode": (
+                VARIATION_TEMP_SPACE_VALUES.get(variation)
+                if variation is not None
+                else None
+            ),
+            # 净化 / 除菌
+            "degerming_bits": degerming_bits,
+            "degerming_active": degerming_active,
+            "degerming_switch": degerming_bits["degermingSwitch"],
+            "cleaner_switch": degerming_bits["cleanerSwitch"],
+        }
 
-            work_mode_id = result_list[3]
-            variation_mode_id = result_list[130] if len(result_list) > 130 else 0
+        # 告警：detail 的 states 直接给出每个告警位。
+        #   "0"  = 正常      → alarm_states[key] = False
+        #   "1"  = 异常      → alarm_states[key] = True
+        #   "--" = 机型不支持 → 记入 unsupported，对应实体显示 unavailable 并禁用
+        #   缺失 = 本次响应不完整 → 只记入 missing，不当作不支持（否则会把
+        #          有效实体永久禁用，再也回不来）
+        alarm_states = {}
+        unsupported_alarms = []
+        missing_alarms = []
+        for code in FRIDGE_ALARM_CODES:
+            raw = states.get(code)
+            if raw == "1":
+                alarm_states[code] = True
+            elif raw == "0":
+                alarm_states[code] = False
+            elif raw == UNSUPPORTED_ALARM_VALUE:
+                # 机型明确不支持 → 实体保留但不可用，并写入实体注册表禁用
+                unsupported_alarms.append(code)
+            else:
+                # 键缺失 → 只是这次没读到，下一次完整响应就会恢复
+                missing_alarms.append(code)
+        updates["alarm_states"] = alarm_states
+        updates["unsupported_alarms"] = unsupported_alarms
+        updates["missing_alarms"] = missing_alarms
+        updates = {key: v for key, v in updates.items() if v is not None}
+        self.status.update(updates)
+        return set(updates)
 
-            status = {
-                "refrigerator_set_temperature": result_list[0],
-                "freeze_set_temperature": result_list[1],
-                "work_mode_id": work_mode_id,
-                "work_mode": self.work_mode_lookup.get(work_mode_id, "自定义"),
-                "power_on": result_list[4] == 1,
-                "refrigerator_real_temperature": result_list[6],
-                "freeze_real_temperature": result_list[7],
-                "variation_real_temperature": result_list[8],
-                "ambient_temperature": result_list[9],
-                "variation_mode_id": variation_mode_id,
-                "variation_mode": self.variation_mode_lookup.get(variation_mode_id, "NORMAL"),
-            }
-        except (IndexError, TypeError, ValueError):
-            _LOGGER.error("Failed to parse Hisense fridge status response", exc_info=True)
-            return False
-
-        self.status.update(status)
-        return True
-
-    async def _send_command_and_update_status(self, url, command_data):
-        result = await self._robust_send_command(
-            url,
-            command_data,
-            status_required=False,
-        )
-        if result is True:
-            return True
-        if result is None:
-            return bool(await self.check_status())
-        return False
-
-    async def turn_on(self):
-        command_data = deepcopy(self.power_data_template)
-        command_data["attributes"] = "{\"onAndOff\":\"On\"}"
-        return await self._send_command_and_update_status(self.power_url, command_data)
-
-    async def turn_off(self):
-        command_data = deepcopy(self.power_data_template)
-        command_data["attributes"] = "{\"onAndOff\":\"Off\"}"
-        return await self._send_command_and_update_status(self.power_url, command_data)
-
-    async def send_logic_command(self, id: int, param: int):
-        command_data = deepcopy(self.command_data_template)
-        command_data["cmdList"] = [
-            {"cmdId": id, "cmdOrder": 0, "cmdParm": param, "delayTime": 0}
-        ]
-        return await self._send_command_and_update_status(self.command_url, command_data)
+    # ------------------------------------------------------------------
+    # 控制
+    # ------------------------------------------------------------------
 
     async def set_refrigerator_temperature(self, temperature: int):
-        return await self.send_logic_command(1, temperature)
+        """Set the refrigerator (fridge) compartment target temperature."""
+        temperature = self._clamp(
+            temperature,
+            REFRIGERATOR_SET_TEMP_MIN,
+            REFRIGERATOR_SET_TEMP_MAX,
+        )
+        ok = await self._send_aihome_action(
+            SET_REFRIGERATOR_TEMPERATURE,
+            {PARAM_REFRIGERATOR_SET_TEMPERATURE: {"value": temperature}},
+        )
+        if ok:
+            # 手动改温度会退出预设模式，同步清掉模式位
+            self._set_pending_status(
+                {
+                    "refrigerator_temperature": temperature,
+                    "smart_mode": False,
+                    "quick_cooling_mode": False,
+                }
+            )
+        return ok
 
     async def set_freeze_temperature(self, temperature: int):
-        return await self.send_logic_command(2, temperature)
+        """Set the freezer compartment target temperature.
 
-    async def set_work_mode(self, mode_id: int):
-        return await self.send_logic_command(3, mode_id)
+        Per the cloud conflict table, ``SetTemperature.Freeze`` only conflicts with
+        the Smart mode (``0``); QuickCooling (``3``) does *not* block freezer
+        temperature, so we must not clear that bit here.
+        """
+        temperature = self._clamp(
+            temperature, FREEZE_SET_TEMP_MIN, FREEZE_SET_TEMP_MAX
+        )
+        ok = await self._send_aihome_action(
+            SET_FREEZE_TEMPERATURE,
+            {PARAM_FREEZE_SET_TEMPERATURE: {"value": temperature}},
+        )
+        if ok:
+            self._set_pending_status(
+                {
+                    "freezer_temperature": temperature,
+                    "smart_mode": False,
+                }
+            )
+        return ok
 
-    async def set_fridge_mode(self, mode_id: int):
-        if mode_id == 64:
-            return await self.send_logic_command(19, 1)
-        if mode_id == 65:
-            return await self.send_logic_command(25, 1)
-        return False
+    async def set_work_mode(self, mode_id: int | str | None, *, enable: bool = True):
+        """Enable or disable one preset working mode (legacy entry point)."""
+        return await self.set_fridge_mode(mode_id, enable=enable)
 
-    async def set_variation_mode(self, mode_id: int):
-        if mode_id == 64:
-            return await self.send_logic_command(33, 1)
-        if mode_id == 32:
-            return await self.send_logic_command(34, 1)
-        if mode_id == 16:
-            return await self.send_logic_command(35, 1)
-        return False
+    async def set_fridge_mode(self, mode_id: int | str | None, *, enable: bool = True):
+        """Turn the 智能 or 速冷 preset mode on or off.
 
-    async def check_status(self):
-        if await self._robust_send_command(self.check_url, self.check_data_template):
-            return self.get_status()
-        return None
+        ``mode_id`` accepts the internal names (``SMART`` / ``QUICK_COOLING``),
+        the Chinese labels, or the integer codes used by the legacy API
+        (``64`` = smart, ``65`` = quick cooling).
 
-    def get_status(self):
-        return dict(self.status)
-
-    async def refresh(self):
-        refresh_data = {
-            'refreshToken': self.refresh_token,
-            'appKey': "1234567890",
-            'format': '1',
-        }
-        try:
-            async with self.session.post(self.refresh_url,
-                                         headers=self.refresh_headers,
-                                         data=refresh_data) as response:
-                result = await response.json()
-                if not isinstance(result, list) or not result:
-                    _LOGGER.error("Hisense fridge token refresh returned unexpected body: %s", result)
-                    return False
-                token = result[0].get("token") if isinstance(result[0], dict) else None
-                if not token:
-                    _LOGGER.error("Hisense fridge token refresh response did not include token")
-                    return False
-                self.access_token = token
-                _LOGGER.debug(f"Get fridge access token: {self.access_token}")
-                return True
-        except Exception:
-            _LOGGER.error("Failed to refresh fridge token", exc_info=True)
+        Both directions use the same command/parameter pair and differ only in
+        the value (``"1"`` / ``"0"``); the App sends ``exclusionFlag: 1`` in
+        either case, so no extra payload is needed.
+        """
+        mode = _normalize_fridge_mode(mode_id)
+        if mode is None:
+            _LOGGER.warning("Hisense fridge: unknown work mode %r", mode_id)
             return False
+        command, param = WORK_MODE_COMMANDS[mode]
+        value = MODE_SWITCH_ON if enable else MODE_SWITCH_OFF
+        ok = await self._send_aihome_action(command, {param: {"value": value}})
+        if ok:
+            if enable:
+                # 两种模式互斥：开一个，另一个必然被云端关掉。
+                self._set_pending_status(
+                    {
+                        "smart_mode": mode == "SMART",
+                        "quick_cooling_mode": mode == "QUICK_COOLING",
+                    }
+                )
+            else:
+                self._set_pending_status(
+                    {
+                        "smart_mode"
+                        if mode == "SMART"
+                        else "quick_cooling_mode": False
+                    }
+                )
+        return ok
+
+    async def clear_fridge_modes(self):
+        """Leave whatever preset mode is running and return to manual control.
+
+        Turning the mode off does not touch the set temperatures: the cloud
+        overwrites ``displayTemperature`` while a mode is active, while
+        ``refrigeratorSetTemperature`` / ``freezeSetTemperature`` keep the value
+        the user dialled in, so the fridge falls back to it by itself.
+        """
+        active = [
+            mode
+            for mode, key in (
+                ("SMART", "smart_mode"),
+                ("QUICK_COOLING", "quick_cooling_mode"),
+            )
+            if self.status.get(key)
+        ]
+        if not active:
+            # 本来就不在预设模式：已经是自定义，无需下发。
+            return True
+        for mode in active:
+            if not await self.set_fridge_mode(mode, enable=False):
+                return False
+        return True
+
+    async def set_fridge_degerming(self, enabled: bool):
+        """Start or stop the combined degerming + odor-removal cycle.
+
+        One command drives both: after ``dBDDegerming=1`` the device reports
+        ``dBDDegerming`` and ``cleanerSwitch`` as ``1`` together (the layout
+        section is titled 离子除菌净味系统), which is why the control entity is
+        named "除菌+净味".
+
+        The command name has **no** ``Set`` prefix (unlike every other fridge
+        command); ``SetDegermingSwitch`` / ``SetCleanerSwitch`` / ``SetDBDDegerming``
+        all return ``notSupported``.
+        """
+        value = "1" if enabled else "0"
+        ok = await self._send_aihome_action(
+            DBD_DEGERMING,
+            {PARAM_DBD_DEGERMING: {"value": value}},
+        )
+        if ok:
+            self._set_pending_status({"degerming_active": bool(enabled)})
+        return ok
+
+    async def set_variation_mode(self, mode_id: int | str | None):
+        """Set the variable-temperature drawer mode.
+
+        Accepts the numeric AIHome value (0 = 原鲜, 1 = 0℃养鲜, 2 = 母婴), the
+        Chinese label, or the legacy English aliases (``ORIGINAL_FRESH`` etc.).
+        """
+        value = _normalize_variation_mode(mode_id)
+        if value is None:
+            _LOGGER.warning("Hisense fridge: unknown variation mode %r", mode_id)
+            return False
+        ok = await self._send_aihome_action(
+            SET_VARIATION_TEMP_SPACE_DRAWER,
+            {PARAM_VARIATION_TEMP_SPACE_DRAWER: {"value": value}},
+        )
+        if ok:
+            self._set_pending_status(
+                {
+                    "variation_mode_id": value,
+                    "variation_mode": VARIATION_TEMP_SPACE_VALUES.get(value),
+                }
+            )
+        return ok
+
+    @staticmethod
+    def _clamp(value, lower, upper):
+        try:
+            number = int(round(float(value)))
+        except (TypeError, ValueError):
+            return lower
+        return max(lower, min(upper, number))
+

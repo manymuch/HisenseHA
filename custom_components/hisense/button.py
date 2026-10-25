@@ -1,6 +1,5 @@
 from homeassistant.components.button import ButtonEntity
 from homeassistant.const import EntityCategory
-from homeassistant.exceptions import HomeAssistantError
 
 from .const import DOMAIN
 from .entity import HisenseEntity
@@ -14,15 +13,13 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     coordinators = hass.data[DOMAIN][config_entry.entry_id]
     entities = [HisenseACUpdateButton(coordinator) for coordinator in coordinators.values()]
     async_add_entities(entities)
-    entities = [
-        HisenseACRefreshTokenButton(coordinator)
-        for coordinator in coordinators.values()
-    ]
-    async_add_entities(entities)
 
 
 class HisenseACUpdateButton(HisenseEntity, ButtonEntity):
     _attr_translation_key = "force_update"
+
+    #: Keep the refrigerator refresh button usable while the device is offline.
+    _attr_available_offline = True
 
     def __init__(self, coordinator):
         super().__init__(coordinator, "force_update_button", "force_update")
@@ -32,21 +29,4 @@ class HisenseACUpdateButton(HisenseEntity, ButtonEntity):
     async def async_press(self):
         """Handle the button press."""
         _LOGGER.debug(f"Button pressed for entity: {self._attr_unique_id}")
-        await self.coordinator.async_request_refresh()
-        if not self.coordinator.last_update_success:
-            raise HomeAssistantError("Failed to refresh Hisense AC status")
-
-
-class HisenseACRefreshTokenButton(HisenseEntity, ButtonEntity):
-    _attr_translation_key = "refresh_token"
-
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "refresh_token", "refresh_token")
-        self._attr_icon = "mdi:refresh"
-        self._attr_entity_category = EntityCategory.DIAGNOSTIC
-
-    async def async_press(self):
-        """Handle the button press."""
-        _LOGGER.debug(f"Button pressed for entity: {self._attr_unique_id}")
-        if not await self.client.refresh():
-            raise HomeAssistantError("Failed to refresh Hisense access token")
+        self.coordinator.async_start_refresh()
