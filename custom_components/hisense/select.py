@@ -1,19 +1,11 @@
-"""Refrigerator mode select entities backed by the AIHome API.
-
-Two selects are exposed per fridge:
-
-* ``work_mode_select`` — 智能 / 速冷 / 自定义. Picking 自定义 sends
-  ``SetModes.*`` with value ``"0"`` to leave the running preset, i.e. it is a
-  real command now, not a display-only placeholder.
-* ``variation_mode_select`` — 原鲜 / 0℃养鲜 / 母婴.
-"""
+"""Refrigerator selects with options derived from reported model capabilities."""
 
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
 from homeassistant.exceptions import HomeAssistantError
 
 from .const import DOMAIN
 from .entity import HisenseEntity
-from .fridge_const import VARIATION_TEMP_SPACE_VALUES
+from .fridge_const import VARIATION_TEMP_SPACE_VALUES, WORK_MODE_LABELS
 
 #: 「自定义」= 退出正在运行的预设模式（下发 value="0"），不是只读展示值。
 CUSTOM_MODE = "自定义"
@@ -67,26 +59,29 @@ class HisenseFridgeModeSelect(HisenseEntity, SelectEntity):
         self.entity_description = description
 
     @property
+    def options(self):
+        if self.entity_description.key == "work_mode_select":
+            return [
+                WORK_MODE_LABELS[mode] for mode in self.client.supported_work_modes
+            ] + [CUSTOM_MODE]
+        return list(self.client.variation_options.values())
+
+    @property
     def current_option(self) -> str | None:
         if self.entity_description.key == "work_mode_select":
-            if self.status.get("quick_cooling_mode"):
-                return "速冷"
-            if self.status.get("smart_mode"):
-                return "智能"
-            # 既非智能也非速冷 = 自定义模式
-            return CUSTOM_MODE
+            return self.client.work_mode_label
         return self.status.get("variation_mode")
 
     async def async_select_option(self, option: str) -> None:
         if self.entity_description.key == "work_mode_select":
             if option == CUSTOM_MODE:
                 # 「自定义」= 退出正在运行的预设模式（SetModes.* 发 value="0"）。
-                # 两个模式互斥，所以只会关掉当前那一个；设定温度不受影响，
+                # 只关闭当前激活的预设模式；设定温度不受影响，
                 # 模式关掉后 displayTemperature 自动回落到用户原来的设定值。
                 ok = await self.client.clear_fridge_modes()
                 label = "退出工作模式"
             else:
-                ok = await self.client.set_fridge_mode(option)
+                ok = await self.client.select_fridge_mode(option)
                 label = "工作模式"
         else:
             ok = await self.client.set_variation_mode(option)

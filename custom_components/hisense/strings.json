@@ -74,6 +74,15 @@
       },
       "fridge_degerming": {
         "name": "Degerming + odor removal"
+      },
+      "fridge_ai_eco": {
+        "name": "AI energy saving"
+      },
+      "fridge_ai_control_temp": {
+        "name": "AI constant temperature"
+      },
+      "fridge_quiet_mode": {
+        "name": "Smart noise reduction"
       }
     },
     "button": {
@@ -101,7 +110,10 @@
         "state": {
           "智能": "Smart",
           "速冷": "Quick cooling",
-          "自定义": "Custom"
+          "自定义": "Custom",
+          "日常": "Daily",
+          "急冻": "Quick freeze",
+          "假日": "Holiday"
         }
       },
       "fridge_variation_mode_select": {
@@ -109,7 +121,9 @@
         "state": {
           "原鲜": "Original fresh",
           "0℃养鲜": "0°C fresh",
-          "母婴": "Baby care"
+          "母婴": "Baby care",
+          "冰鲜": "Chilled",
+          "零度": "Zero degree"
         }
       }
     },

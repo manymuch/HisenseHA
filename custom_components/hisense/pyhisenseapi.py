@@ -28,6 +28,9 @@ from .fridge_const import (
     UNSUPPORTED_ALARM_VALUE,
     VARIATION_TEMP_SPACE_VALUES,
     WORK_MODE_COMMANDS,
+    WORK_MODE_STATUS_KEYS,
+    WORK_MODE_LABELS,
+    RONSHEN_VARIATION_TEMP_SPACE_VALUES,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -86,10 +89,18 @@ _FRIDGE_MODE_ALIASES = {
     "速冷": "QUICK_COOLING",
     "速冷模式": "QUICK_COOLING",
     "65": "QUICK_COOLING",
+    "daily": "DAILY", "日常": "DAILY",
+    "super_frozen": "SUPER_FROZEN", "急冻": "SUPER_FROZEN",
+    "holiday": "HOLIDAY", "假日": "HOLIDAY",
+    "ai_eco": "AI_ECO", "ai节能": "AI_ECO",
+    "ai_control_temp": "AI_CONTROL_TEMP", "ai恒温": "AI_CONTROL_TEMP",
+    "quiet": "QUIET", "智能降噪": "QUIET",
 }
 
 #: 变温空间别名 → 数值（兼容中文标签与旧 API 英文名）
 _FRIDGE_VARIATION_MODE_ALIASES = {
+    "冰鲜": 0, "chilled": 0,
+    "零度": 1, "baby_care": 2,
     "原鲜": 0,
     "originalfresh1": 0,
     "original_fresh": 0,
@@ -105,7 +116,7 @@ _FRIDGE_VARIATION_MODE_ALIASES = {
 }
 
 def _normalize_fridge_mode(mode_id):
-    """Map a mode identifier (name/label/legacy int) to SMART / QUICK_COOLING."""
+    """Map a mode identifier (name/label/legacy int) to an internal mode."""
     if mode_id is None:
         return None
     if isinstance(mode_id, (int, float)):
@@ -1498,7 +1509,12 @@ class HiSenseFridge(_HiSenseDevice):
             self.status["online"] = False
             return {"online"}
 
-        variation = number("variationTempSpaceDrawer")
+        # Remember the drawer protocol only after a usable online report.
+        if number("variaTempKeepFreshDrawer") is not None:
+            self._ronshen_drawer = True
+        variation = number("variaTempKeepFreshDrawer")
+        if variation is None:
+            variation = number("variationTempSpaceDrawer")
         # 除菌：layout 第 18-21 栏把三个键列为同一功能的备选上报名，实测只有
         # dBDDegerming 跟随 DBDDegerming 命令变化（1=运行中 / 0=停止），
         # cleanerSwitch 开后不跟关，degermingSwitch 恒 0。所以实体只绑前者，
@@ -1529,11 +1545,17 @@ class HiSenseFridge(_HiSenseDevice):
             # 模式：用布尔位（跨机型稳定）。workMode 总编码本机是 0/3/--，
             # 旧固件是 64/65，编码不统一，不用于读状态。
             "smart_mode": flag("workMode.Smart"),
+            "daily_mode": flag("workMode.Daily"),
+            "super_frozen_mode": flag("workMode.SuperFrozen"),
+            "holiday_mode": flag("workMode.Holiday"),
+            "ai_eco_mode": flag("aiEcoSwitch"),
+            "ai_control_temp_mode": flag("workMode.AIControlTemp"),
+            "quiet_mode": flag("quietModeSwitch"),
             "quick_cooling_mode": flag("workMode.QuickCooling"),
             # 变温空间
             "variation_mode_id": variation,
             "variation_mode": (
-                VARIATION_TEMP_SPACE_VALUES.get(variation)
+                self.variation_options.get(variation)
                 if variation is not None
                 else None
             ),
@@ -1592,8 +1614,8 @@ class HiSenseFridge(_HiSenseDevice):
             self._set_pending_status(
                 {
                     "refrigerator_temperature": temperature,
-                    "smart_mode": False,
-                    "quick_cooling_mode": False,
+                    **({"smart_mode": False, "quick_cooling_mode": False}
+                       if "SMART" in self.supported_work_modes else {}),
                 }
             )
         return ok
@@ -1616,7 +1638,8 @@ class HiSenseFridge(_HiSenseDevice):
             self._set_pending_status(
                 {
                     "freezer_temperature": temperature,
-                    "smart_mode": False,
+                    **({"smart_mode": False}
+                       if "SMART" in self.supported_work_modes else {}),
                 }
             )
         return ok
@@ -1625,65 +1648,72 @@ class HiSenseFridge(_HiSenseDevice):
         """Enable or disable one preset working mode (legacy entry point)."""
         return await self.set_fridge_mode(mode_id, enable=enable)
 
+    @property
+    def variation_options(self):
+        """Use the labels belonging to the reported drawer protocol."""
+        if getattr(self, "_ronshen_drawer", False):
+            return RONSHEN_VARIATION_TEMP_SPACE_VALUES
+        return VARIATION_TEMP_SPACE_VALUES
+
+    @property
+    def supported_work_modes(self):
+        """Only expose new commands when their state bit was reported."""
+        modes = [
+            mode for mode in WORK_MODE_LABELS
+            if self.status.get(WORK_MODE_STATUS_KEYS[mode]) is not None
+        ]
+        # Preserve the v1.7.8 defaults until the first usable mode report.
+        if not any(mode in modes for mode in ("DAILY", "SUPER_FROZEN", "HOLIDAY")):
+            return ["SMART", "QUICK_COOLING"]
+        return modes
+
+    @property
+    def work_mode_label(self):
+        for mode in ("QUICK_COOLING", "SUPER_FROZEN", "HOLIDAY", "DAILY", "SMART"):
+            if self.status.get(WORK_MODE_STATUS_KEYS[mode]):
+                return WORK_MODE_LABELS[mode]
+        return "自定义"
+
     async def set_fridge_mode(self, mode_id: int | str | None, *, enable: bool = True):
-        """Turn the 智能 or 速冷 preset mode on or off.
-
-        ``mode_id`` accepts the internal names (``SMART`` / ``QUICK_COOLING``),
-        the Chinese labels, or the integer codes used by the legacy API
-        (``64`` = smart, ``65`` = quick cooling).
-
-        Both directions use the same command/parameter pair and differ only in
-        the value (``"1"`` / ``"0"``); the App sends ``exclusionFlag: 1`` in
-        either case, so no extra payload is needed.
-        """
+        """Set a supported preset or an independent feature switch."""
         mode = _normalize_fridge_mode(mode_id)
         if mode is None:
-            _LOGGER.warning("Hisense fridge: unknown work mode %r", mode_id)
+            return False
+        if mode not in WORK_MODE_LABELS:
+            if self.status.get(WORK_MODE_STATUS_KEYS[mode]) is None:
+                return False
+        elif mode not in self.supported_work_modes:
             return False
         command, param = WORK_MODE_COMMANDS[mode]
         value = MODE_SWITCH_ON if enable else MODE_SWITCH_OFF
         ok = await self._send_aihome_action(command, {param: {"value": value}})
         if ok:
-            if enable:
-                # 两种模式互斥：开一个，另一个必然被云端关掉。
-                self._set_pending_status(
-                    {
-                        "smart_mode": mode == "SMART",
-                        "quick_cooling_mode": mode == "QUICK_COOLING",
-                    }
-                )
-            else:
-                self._set_pending_status(
-                    {
-                        "smart_mode"
-                        if mode == "SMART"
-                        else "quick_cooling_mode": False
-                    }
-                )
+            updates = {WORK_MODE_STATUS_KEYS[mode]: bool(enable)}
+            # The old Smart/QuickCooling protocol has confirmed exclusions.
+            # Other models reconcile exclusions from the next cloud report.
+            if enable and mode in ("SMART", "QUICK_COOLING") and "SMART" in self.supported_work_modes:
+                updates.update({"smart_mode": mode == "SMART",
+                                "quick_cooling_mode": mode == "QUICK_COOLING"})
+            self._set_pending_status(updates)
         return ok
 
-    async def clear_fridge_modes(self):
-        """Leave whatever preset mode is running and return to manual control.
+    async def select_fridge_mode(self, mode_id):
+        """Clear only reported, active competing presets before selection."""
+        mode = _normalize_fridge_mode(mode_id)
+        if mode not in self.supported_work_modes:
+            return False
+        if self.supported_work_modes == ["SMART", "QUICK_COOLING"]:
+            return await self.set_fridge_mode(mode)
+        if not await self.clear_fridge_modes(except_mode=mode):
+            return False
+        return await self.set_fridge_mode(mode)
 
-        Turning the mode off does not touch the set temperatures: the cloud
-        overwrites ``displayTemperature`` while a mode is active, while
-        ``refrigeratorSetTemperature`` / ``freezeSetTemperature`` keep the value
-        the user dialled in, so the fridge falls back to it by itself.
-        """
-        active = [
-            mode
-            for mode, key in (
-                ("SMART", "smart_mode"),
-                ("QUICK_COOLING", "quick_cooling_mode"),
-            )
-            if self.status.get(key)
-        ]
-        if not active:
-            # 本来就不在预设模式：已经是自定义，无需下发。
-            return True
-        for mode in active:
-            if not await self.set_fridge_mode(mode, enable=False):
-                return False
+    async def clear_fridge_modes(self, *, except_mode=None):
+        """Leave active presets without changing independent AI switches."""
+        for mode in self.supported_work_modes:
+            if mode != except_mode and self.status.get(WORK_MODE_STATUS_KEYS[mode]):
+                if not await self.set_fridge_mode(mode, enable=False):
+                    return False
         return True
 
     async def set_fridge_degerming(self, enabled: bool):
@@ -1717,15 +1747,17 @@ class HiSenseFridge(_HiSenseDevice):
         if value is None:
             _LOGGER.warning("Hisense fridge: unknown variation mode %r", mode_id)
             return False
-        ok = await self._send_aihome_action(
-            SET_VARIATION_TEMP_SPACE_DRAWER,
-            {PARAM_VARIATION_TEMP_SPACE_DRAWER: {"value": value}},
-        )
+        command = SET_VARIATION_TEMP_SPACE_DRAWER
+        param = PARAM_VARIATION_TEMP_SPACE_DRAWER
+        if getattr(self, "_ronshen_drawer", False):
+            command = "connector.device.command.SetVariaTempKeepFreshDrawer"
+            param = "variaTempKeepFreshDrawer"
+        ok = await self._send_aihome_action(command, {param: {"value": value}})
         if ok:
             self._set_pending_status(
                 {
                     "variation_mode_id": value,
-                    "variation_mode": VARIATION_TEMP_SPACE_VALUES.get(value),
+                    "variation_mode": self.variation_options.get(value),
                 }
             )
         return ok

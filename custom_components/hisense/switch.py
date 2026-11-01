@@ -3,6 +3,7 @@ from homeassistant.exceptions import HomeAssistantError
 
 from .const import DOMAIN
 from .entity import HisenseEntity
+from .fridge_const import WORK_MODE_STATUS_KEYS
 
 import logging
 
@@ -30,6 +31,13 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     ]
     for coordinator in fridge_coordinators:
         _add_fridge_degerming_switch(coordinator, async_add_entities)
+        for mode, key in (
+            ("AI_ECO", "fridge_ai_eco"),
+            ("AI_CONTROL_TEMP", "fridge_ai_control_temp"),
+            ("QUIET", "fridge_quiet_mode"),
+        ):
+            _add_fridge_ai_switch(coordinator, async_add_entities, mode, key, config_entry)
+
 
 
 def _add_fridge_degerming_switch(coordinator, async_add_entities):
@@ -101,6 +109,73 @@ class HisenseFridgeDegermingSwitch(HisenseEntity, SwitchEntity):
             self.coordinator.async_update_from_client()
             return
         raise HomeAssistantError("Failed to stop Hisense fridge degerming")
+
+
+def _add_fridge_ai_switch(
+    coordinator, async_add_entities, mode: str, key: str, config_entry
+):
+    """Create an independent fridge switch only when the model reports the bit.
+
+    Used for AI节能 / AI恒温 / 智能降噪.
+    """
+    sentinel = f"_fridge_{key}_added"
+    if coordinator.__dict__.get(sentinel):
+        return
+    status_key = WORK_MODE_STATUS_KEYS[mode]
+    remove_listener = None
+
+    def _on_update():
+        status = coordinator.data or coordinator.client.get_status()
+        if status.get(status_key) is None:
+            return
+        if remove_listener is not None:
+            remove_listener()
+        coordinator.__dict__[sentinel] = True
+        async_add_entities([HisenseFridgeModeSwitch(coordinator, mode, key)])
+
+    _on_update()
+    if not coordinator.__dict__.get(sentinel):
+        remove_listener = coordinator.async_add_listener(_on_update)
+        config_entry.async_on_unload(remove_listener)
+
+
+class HisenseFridgeModeSwitch(HisenseEntity, SwitchEntity):
+    """冰箱独立开关：AI节能 / AI恒温 / 智能降噪。
+
+    这些是独立功能位，可以与工作模式（日常/速冷/急冻/假日）并存，
+    因此做成 switch 而不是 select 选项。
+    """
+
+    def __init__(self, coordinator, mode: str, key: str):
+        super().__init__(coordinator, key, key)
+        self._mode = mode
+        self._status_key = WORK_MODE_STATUS_KEYS[mode]
+        self._attr_translation_key = key
+        self._attr_icon = {
+            "AI_ECO": "mdi:leaf",
+            "AI_CONTROL_TEMP": "mdi:thermometer-auto",
+            "QUIET": "mdi:volume-off",
+        }.get(mode, "mdi:toggle-switch")
+
+    @property
+    def available(self):
+        return super().available and self.status.get(self._status_key) is not None
+
+    @property
+    def is_on(self):
+        return self.status.get(self._status_key)
+
+    async def async_turn_on(self):
+        if await self.client.set_fridge_mode(self._mode, enable=True):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError(f"Failed to turn on Hisense fridge {self._mode}")
+
+    async def async_turn_off(self):
+        if await self.client.set_fridge_mode(self._mode, enable=False):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError(f"Failed to turn off Hisense fridge {self._mode}")
 
 
 class AcScreenSwitch(HisenseEntity, SwitchEntity):

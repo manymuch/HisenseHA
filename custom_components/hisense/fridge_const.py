@@ -33,7 +33,30 @@ PARAM_DBD_DEGERMING = "dBDDegerming"
 WORK_MODE_COMMANDS: dict[str, tuple[str, str]] = {
     "SMART": (SET_MODE_SMART, PARAM_SMART_MODE_SWITCH),
     "QUICK_COOLING": (SET_MODE_QUICK_COOLING, PARAM_QUICK_COOLING_MODE_SWITCH),
+    # Ronshen additions; Smart remains a separate protocol.
+    "DAILY": (COMMAND_PREFIX + "SetModes.Daily", "dailyModeSwitch"),
+    "SUPER_FROZEN": (COMMAND_PREFIX + "SetModes.SuperFrozen", "superFrozenModeSwitch"),
+    "HOLIDAY": (COMMAND_PREFIX + "SetModes.Holiday", "holidayModeSwitch"),
+    "AI_ECO": (COMMAND_PREFIX + "SetAIEcoSwitch", "aiEcoSwitch"),
+    "AI_CONTROL_TEMP": (COMMAND_PREFIX + "SetModes.AIControlTemp", "aiControlTempModeSwitch"),
+    "QUIET": (COMMAND_PREFIX + "SetQuietModeSwitch", "quietModeSwitch"),
 }
+
+WORK_MODE_STATUS_KEYS = {
+    "SMART": "smart_mode",
+    "QUICK_COOLING": "quick_cooling_mode",
+    "DAILY": "daily_mode",
+    "SUPER_FROZEN": "super_frozen_mode",
+    "HOLIDAY": "holiday_mode",
+    "AI_ECO": "ai_eco_mode",
+    "AI_CONTROL_TEMP": "ai_control_temp_mode",
+    "QUIET": "quiet_mode",
+}
+WORK_MODE_LABELS = {
+    "SMART": "智能", "DAILY": "日常", "QUICK_COOLING": "速冷",
+    "SUPER_FROZEN": "急冻", "HOLIDAY": "假日",
+}
+RONSHEN_VARIATION_TEMP_SPACE_VALUES = {0: "冰鲜", 1: "零度", 2: "母婴"}
 
 MODE_SWITCH_ON = "1"
 

@@ -265,10 +265,10 @@ class HisenseFridgeSensor(HisenseEntity, SensorEntity):
         key = self.entity_description.key
         if key == "work_mode":
             # Needs at least one mode bit to say anything meaningful.
-            return (
-                self.status.get("smart_mode") is not None
-                or self.status.get("quick_cooling_mode") is not None
-            )
+            return any(self.status.get(key) is not None for key in (
+                "smart_mode", "quick_cooling_mode", "daily_mode",
+                "super_frozen_mode", "holiday_mode",
+            ))
         if key in (
             "compressor_frequency",
             "display_refrigerator_temperature",
@@ -305,11 +305,7 @@ class HisenseFridgeSensor(HisenseEntity, SensorEntity):
         return parsed
 
     def _work_mode_label(self) -> str:
-        if self.status.get("quick_cooling_mode"):
-            return "速冷"
-        if self.status.get("smart_mode"):
-            return "智能"
-        return "自定义"
+        return self.client.work_mode_label
 
     @property
     def extra_state_attributes(self):
