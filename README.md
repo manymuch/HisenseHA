@@ -49,3 +49,34 @@ This integration talks to the **Hisense AIHome cloud**. Device state is read dur
 Each device exposes one **Diagnostic** button, **Force refresh**, which requests the current state once from the Hisense AIHome cloud. Each press causes a real cloud request; do not automate it as frequent polling.
 
 If you need **real-time status update**, we recommend pairing the same Hisense device with **Mi Home** as well, then in Home Assistant use [Xiaomi Miot](https://github.com/al-one/hass-xiaomi-miot) or [Xiaomi Home](https://github.com/xiaomi/ha_xiaomi_home) to observe Mi Home state changes, and an **automation** that triggers this integration’s **Force refresh** button for the matching device when the Xiaomi entity changes, to sync Hisense entities indirectly.
+
+## Fridge dashboard card (built-in)
+
+Since v1.8.0 the integration ships a visual fridge card (`hisense-fridge-card`) and **registers it automatically** on startup — no manual resource setup needed. It shows refrigerator / freezer / variable-temperature zone temps over a fridge diagram, door-open alarm badges, and lets you switch work mode, variable-zone preset, and toggle degerming directly. Clicking a zone opens the matching entity's more-info dialog.
+
+**GUI mode** (default): after restart, add a card on your dashboard → **Custom: 海信冰箱卡片 / Hisense Fridge Card**, or paste manually:
+
+```yaml
+type: custom:hisense-fridge-card
+# name_prefix: hai_xin_bing_xiang   # entity id prefix (default shown)
+# name: 海信冰箱                     # card title (auto from device if omitted)
+# image: /hisense/hisense-fridge.png # diagram (bundled by default)
+# entities:                          # optional per-entity overrides
+#   fridgeActual: sensor.hai_xin_bing_xiang_temperature_refrigerator_actual
+```
+
+All entities are derived from `name_prefix` by default; open the card editor to override any of them.
+
+> Note: the default prefix targets Hisense-branded fridges (e.g. `hai_xin_bing_xiang`). Other brands supported since v1.7.9 (e.g. Ronshen) have different entity prefixes — set `name_prefix` (or override `entities`) in the card editor accordingly.
+
+**YAML mode dashboards** (Lovelace resource table read-only): the card is injected via `extra_js_url` automatically too; if it does not appear, declare the resource once:
+
+```yaml
+lovelace:
+  mode: yaml
+  resources:
+    - url: /hisense/hisense-fridge-card.js?v=1.8.0
+      type: module
+```
+
+> Tip: after upgrading, hard-refresh the browser (Ctrl/Cmd+Shift+R) if the card still shows the old style.
