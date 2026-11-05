@@ -52,3 +52,34 @@
 每台设备在「诊断」类实体中提供一个 **刷新状态** 按钮，用于向 AIHome 云端 **请求一次当前状态**。每次按下都会产生真实的云端访问，请不要用自动化做成高频轮询。
 
 若你需要 **实时状态**，推荐将同一台海信设备 **同时接入米家**，在 Home Assistant 里使用 [XiaomiMiot](https://github.com/al-one/hass-xiaomi-miot) 或 [XiaomiHome](https://github.com/xiaomi/ha_xiaomi_home) 订阅米家侧的状态变化，再通过 **自动化** 在小米实体变化时 **调用本集成对应设备的「刷新状态」按钮**，从而间接同步海信实体。
+
+## 冰箱可视化卡片（集成自带）
+
+自 v1.8.0 起，集成自带冰箱可视化卡片（`hisense-fridge-card`），并在启动时**自动注册**，无需手动添加前端资源。卡片在冰箱示意图上展示冷藏 / 冷冻 / 变温三区温度，支持门未关告警角标，并可直接切换工作模式、变温档位、除菌+净味；点击分区可打开对应实体详情。
+
+**GUI 模式**（推荐）：重启后在仪表盘「添加卡片 → 手动」粘贴：
+
+```yaml
+type: custom:hisense-fridge-card
+# name_prefix: hai_xin_bing_xiang   # 实体 ID 前缀（默认如上）
+# name: 海信冰箱                     # 卡片标题，留空自动取设备名
+# image: /hisense/hisense-fridge.png # 示意图，默认集成自带
+# entities:                          # 可选：逐项覆盖实体
+#   fridgeActual: sensor.hai_xin_bing_xiang_temperature_refrigerator_actual
+```
+
+全部实体默认由 `name_prefix` 拼出，可在卡片编辑器里逐项覆盖。
+
+> 注：默认前缀对应海信品牌冰箱（如 `hai_xin_bing_xiang`）。v1.7.9 起支持的其他品牌（如容声）实体前缀不同，请在卡片编辑器里修改 `name_prefix` 或逐项覆盖实体。
+
+**YAML 模式仪表盘**（Lovelace 资源表只读时）：集成会通过 `extra_js_url` 自动注入；若卡片未出现，请在 `configuration.yaml` 手动声明一次资源：
+
+```yaml
+lovelace:
+  mode: yaml
+  resources:
+    - url: /hisense/hisense-fridge-card.js?v=1.8.0
+      type: module
+```
+
+> 提示：升级集成后若卡片样式未更新，请硬刷新浏览器（Ctrl/Cmd+Shift+R）。

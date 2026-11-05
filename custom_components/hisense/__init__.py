@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 from homeassistant import config_entries, core
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -6,6 +7,8 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .const import CONF_PASSWORD, CONF_USERNAME, DOMAIN
 from .coordinator import HisenseDataUpdateCoordinator
 from .pyhisenseapi import HiSenseAC, HiSenseDryer, HiSenseFridge, HiSenseWasher
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.ConfigEntry):
@@ -151,6 +154,29 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
     ]
     await hass.config_entries.async_forward_entry_setups(entry, platforms)
     return True
+
+
+async def async_setup(hass: core.HomeAssistant, config):
+    """集成级初始化：注册自带 Lovelace 卡片（失败不影响集成本体）。"""
+    from .frontend import async_setup_card
+
+    try:
+        await async_setup_card(hass)
+    except Exception as error:  # noqa: BLE001
+        _LOGGER.warning("注册前端卡片资源失败（不影响集成本体）: %s", error)
+    return True
+
+
+async def async_remove_entry(hass: core.HomeAssistant, entry):
+    """最后一个配置条目删除时才清理卡片资源（多设备场景删一个卡片仍需可用）。"""
+    if hass.config_entries.async_entries(DOMAIN):
+        return
+    from .frontend import async_remove_card
+
+    try:
+        await async_remove_card(hass)
+    except Exception as error:  # noqa: BLE001
+        _LOGGER.warning("移除前端卡片资源失败: %s", error)
 
 
 async def async_unload_entry(hass: core.HomeAssistant, entry: config_entries.ConfigEntry):
