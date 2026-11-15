@@ -1,11 +1,27 @@
+from __future__ import annotations
+
 import asyncio
+import datetime
+import json
+import logging
 
 from homeassistant import config_entries, core
+from homeassistant.components import persistent_notification
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import CONF_PASSWORD, CONF_USERNAME, DOMAIN
 from .coordinator import HisenseDataUpdateCoordinator
-from .pyhisenseapi import HiSenseAC, HiSenseDryer, HiSenseFridge, HiSenseWasher
+from .pyhisenseapi import (
+    HiSenseAC,
+    HiSenseDryer,
+    HiSenseFridge,
+    HiSenseWasher,
+    WASHER_PROGRAM_REVERSE_MAP,
+    WASHER_DRY_REVERSE_MAP,
+)
+from .mqtt_client import HisenseMQTTManager
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.ConfigEntry):
@@ -15,6 +31,7 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
     clients = []
     coordinators = []
     token_lock = asyncio.Lock()
+    mqtt_manager: HisenseMQTTManager | None = None
 
     def save_tokens(access_token, refresh_token, customer_id):
         """Keep every device and the config entry on the same token pair."""
@@ -22,6 +39,9 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
             client.access_token = access_token
             client.refresh_token = refresh_token
             client.customer_id = customer_id
+        if mqtt_manager:
+            mqtt_manager.access_token = access_token
+            mqtt_manager.customer_id = customer_id
         devices = [
             {
                 **device,
@@ -140,6 +160,248 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
         hass.data[DOMAIN][entry.entry_id][device_id] = coordinator
         coordinator.async_start_refresh()
 
+    # 初始化并启动海信 MQTT 长连接推送管理器
+    active_token = clients[0].access_token if clients else None
+    active_customer_id = clients[0].customer_id if clients else None
+    if active_token and active_customer_id:
+        def on_mqtt_device_change(target_device_id, message_data):
+            """MQTT 接收到设备状态变更或模拟推送时触发（已调度至主事件循环运行）."""
+            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            target_device_id = str(target_device_id) if target_device_id else None
+            is_simulated = message_data.get("_simulated", False) if isinstance(message_data, dict) else False
+            refresh_cloud = message_data.get("refresh_cloud", False) if isinstance(message_data, dict) else False
+
+            parsed_text = message_data.get("parsed_text") if isinstance(message_data, dict) else None
+            if not parsed_text and isinstance(message_data, dict) and isinstance(message_data.get("text"), str):
+                try:
+                    parsed_text = json.loads(message_data["text"])
+                except Exception:
+                    parsed_text = None
+
+            raw_states = None
+            change_info = None
+            action_val = "onDeviceStateUpdate"
+            tag_val = message_data.get("businessTag", "JHkDeviceChangeBizMessage") if isinstance(message_data, dict) else ""
+
+            if isinstance(parsed_text, dict):
+                raw_states = parsed_text.get("status")
+                change_info = parsed_text.get("changeInfo")
+                action_val = parsed_text.get("action", action_val)
+                if not target_device_id:
+                    target_device_id = parsed_text.get("devId") or parsed_text.get("deviceId")
+
+            # 在 Home Assistant 事件总线上广播通用 MQTT 消息事件
+            hass.bus.async_fire(
+                "hisense_mqtt_message",
+                {
+                    "device_id": target_device_id,
+                    "data": message_data,
+                    "parsed": parsed_text,
+                    "timestamp": now_str,
+                },
+            )
+
+            for dev_id, coord in coordinators:
+                if (
+                    target_device_id is None
+                    or str(dev_id) == target_device_id
+                    or (target_device_id and (target_device_id in str(dev_id) or str(dev_id) in target_device_id))
+                ):
+                    # 1. 如果推送自带完整的设备状态字典，直接更新客户端内存状态
+                    if isinstance(raw_states, dict) and hasattr(coord.client, "_update_from_states"):
+                        coord.client._update_from_states(raw_states)
+                        coord.async_set_updated_data(coord.client.get_status())
+
+                    # 2. 格式化推送简述
+                    summary_str = None
+                    if isinstance(change_info, dict):
+                        changes = []
+                        if "powerStatus" in change_info:
+                            p_val = change_info["powerStatus"]
+                            p_curr = p_val[0] if isinstance(p_val, list) else p_val
+                            changes.append("电源:开机" if str(p_curr) == "1" else "电源:关机")
+                        if "runStatus" in change_info:
+                            r_val = change_info["runStatus"]
+                            r_curr = r_val[0] if isinstance(r_val, list) else r_val
+                            changes.append("运行中" if str(r_curr) == "1" else "已停止/待机")
+                        if "workMode" in change_info:
+                            w_val = change_info["workMode"]
+                            w_curr = w_val[0] if isinstance(w_val, list) else w_val
+                            w_idx = int(w_curr) if str(w_curr).isdigit() else w_curr
+                            w_name = WASHER_PROGRAM_REVERSE_MAP.get(w_idx) or WASHER_PROGRAM_REVERSE_MAP.get(str(w_curr)) or f"程序{w_curr}"
+                            changes.append(f"程序:{w_name}")
+                        if "dehydrationSpeed" in change_info or "dehydrationDrySwitch" in change_info:
+                            s_raw = change_info.get("dehydrationSpeed", change_info.get("dehydrationDrySwitch"))
+                            s_curr = s_raw[0] if isinstance(s_raw, list) else s_raw
+                            changes.append("不脱水" if str(s_curr) == "0" else f"转速:{s_curr}转")
+                        if "washTemperature" in change_info:
+                            t_val = change_info["washTemperature"]
+                            t_curr = t_val[0] if isinstance(t_val, list) else t_val
+                            changes.append(f"水温:{t_curr}℃")
+                        if "washTime" in change_info:
+                            wt_val = change_info["washTime"]
+                            wt_curr = wt_val[0] if isinstance(wt_val, list) else wt_val
+                            changes.append(f"洗涤:{wt_curr}分")
+                        if "rinsingFrequency" in change_info:
+                            rf_val = change_info["rinsingFrequency"]
+                            rf_curr = rf_val[0] if isinstance(rf_val, list) else rf_val
+                            changes.append(f"漂洗:{rf_curr}次")
+                        if "dryingMethod" in change_info:
+                            dm_val = change_info["dryingMethod"]
+                            dm_curr = dm_val[0] if isinstance(dm_val, list) else dm_val
+                            dm_name = WASHER_DRY_REVERSE_MAP.get(str(dm_curr), f"烘干:{dm_curr}")
+                            changes.append(f"烘干:{dm_name}")
+                        if "dryingModes" in change_info:
+                            dms_val = change_info["dryingModes"]
+                            dms_curr = dms_val[0] if isinstance(dms_val, list) else dms_val
+                            changes.append("低温烘:开" if str(dms_curr) == "1" else "低温烘:关")
+                        if "childLock" in change_info:
+                            c_val = change_info["childLock"]
+                            c_curr = c_val[0] if isinstance(c_val, list) else c_val
+                            changes.append("童锁:开" if str(c_curr) == "1" else "童锁:关")
+                        if "remainRunTime" in change_info:
+                            t_val = change_info["remainRunTime"]
+                            t_curr = t_val[0] if isinstance(t_val, list) else t_val
+                            changes.append(f"剩余{t_curr}分")
+                        if changes:
+                            summary_str = " | ".join(changes)
+
+                    # 如果没有具体的变更字段列表，但携带了完整状态字典，生成状态快照
+                    if not summary_str and isinstance(raw_states, dict):
+                        snapshot = []
+                        p_val = raw_states.get("powerStatus")
+                        if str(p_val) == "0":
+                            snapshot.append("关机")
+                        else:
+                            snapshot.append("开机")
+                            r_val = raw_states.get("runStatus")
+                            snapshot.append("运行中" if str(r_val) == "1" else "待机")
+                            w_val = raw_states.get("workMode")
+                            if w_val:
+                                w_idx = int(w_val) if str(w_val).isdigit() else w_val
+                                snapshot.append(WASHER_PROGRAM_REVERSE_MAP.get(w_idx) or WASHER_PROGRAM_REVERSE_MAP.get(str(w_val)) or f"程序{w_val}")
+                            sp_val = raw_states.get("dehydrationSpeed") or raw_states.get("dehydrationDrySwitch")
+                            if sp_val is not None:
+                                snapshot.append("不脱水" if str(sp_val) == "0" else f"{sp_val}转")
+                            temp_val = raw_states.get("washTemperature")
+                            if temp_val is not None:
+                                snapshot.append(f"{temp_val}℃")
+                            wt_val = raw_states.get("washTime")
+                            if wt_val is not None:
+                                snapshot.append(f"洗涤{wt_val}分")
+                            dm_val = raw_states.get("dryingMethod")
+                            if dm_val and str(dm_val) != "0":
+                                snapshot.append(f"烘干:{WASHER_DRY_REVERSE_MAP.get(str(dm_val), dm_val)}")
+                            if str(raw_states.get("dryingModes")) == "1":
+                                snapshot.append("低温烘")
+                            rem_val = raw_states.get("remainRunTime")
+                            if rem_val:
+                                snapshot.append(f"剩余{rem_val}分")
+                        if snapshot:
+                            summary_str = " | ".join(snapshot)
+
+                    status_val = message_data.get("status") if isinstance(message_data, dict) else None
+                    if not summary_str:
+                        if status_val in ("complete", "7"):
+                            summary_str = "洗衣完成 (complete)"
+                        elif status_val in ("running", "1"):
+                            summary_str = "开始运行 (running)"
+                        elif status_val in ("standby", "0"):
+                            summary_str = "待机中 (standby)"
+                        elif status_val == "off":
+                            summary_str = "设备关机 (off)"
+                        else:
+                            summary_str = f"状态变更: {action_val}"
+
+                    # 记录到 Coordinator 供 last_push_message 实体展示与历史回溯
+                    push_record = {
+                        "timestamp": now_str,
+                        "status": status_val,
+                        "action": action_val,
+                        "businessTag": tag_val,
+                        "deviceId": str(dev_id),
+                        "summary": summary_str,
+                        "raw": message_data,
+                        "changeInfo": change_info,
+                    }
+                    coord.last_push = push_record
+                    if not hasattr(coord, "push_history"):
+                        coord.push_history = []
+                    coord.push_history.append({
+                        "time": now_str,
+                        "summary": summary_str,
+                        "status": status_val,
+                        "action": action_val,
+                    })
+                    if len(coord.push_history) > 30:
+                        coord.push_history.pop(0)
+
+                    # 3. 洗衣机完成检测与专属通知
+                    dev_name = getattr(coord.client, "device_name", "海信洗衣机")
+                    is_complete = False
+                    if status_val in ("complete", "7"):
+                        is_complete = True
+                    elif isinstance(change_info, dict) and "runStatus" in change_info:
+                        r_val = change_info["runStatus"]
+                        if isinstance(r_val, list) and len(r_val) >= 2:
+                            if str(r_val[0]) == "0" and str(r_val[1]) == "1":
+                                is_complete = True
+
+                    if is_complete:
+                        hass.bus.async_fire(
+                            "hisense_washer_complete",
+                            {
+                                "device_id": str(dev_id),
+                                "device_name": dev_name,
+                                "status": "complete",
+                                "timestamp": now_str,
+                            },
+                        )
+                        persistent_notification.async_create(
+                            hass,
+                            f"收到海信洗衣机推送：【{dev_name}】已完成洗衣！\n推送时间：{now_str}",
+                            title="海信智慧家 - 洗衣完成提醒",
+                            notification_id=f"hisense_washer_complete_{dev_id}",
+                        )
+
+                    # 立即刷新所有绑定该 coordinator 的实体状态
+                    coord.async_update_listeners()
+
+                    # 如果没有直接携带完整状态字典，或者明确要求云端同步，才发起异步云端拉取
+                    if raw_states is None and (not is_simulated or refresh_cloud):
+                        coord.async_start_refresh()
+
+        mqtt_manager = HisenseMQTTManager(
+            session=session,
+            access_token=active_token,
+            customer_id=active_customer_id,
+            on_message_callback=on_mqtt_device_change,
+            loop=hass.loop,
+        )
+        hass.data[DOMAIN][f"{entry.entry_id}_mqtt"] = mqtt_manager
+
+        # 注册模拟 MQTT 消息服务供测试自动化联动
+        if not hass.services.has_service(DOMAIN, "simulate_mqtt_message"):
+            async def handle_simulate_mqtt_message(call):
+                target_dev = call.data.get("device_id")
+                status = call.data.get("status")
+                raw_payload = call.data.get("raw_payload")
+                refresh_cloud = call.data.get("refresh_cloud", False)
+                payload = dict(raw_payload) if isinstance(raw_payload, dict) else {"status": status or "complete"}
+                payload["_simulated"] = True
+                payload["refresh_cloud"] = refresh_cloud
+                for key, val in hass.data[DOMAIN].items():
+                    if key.endswith("_mqtt") and isinstance(val, HisenseMQTTManager):
+                        val.simulate_message(target_dev, payload)
+
+            hass.services.async_register(DOMAIN, "simulate_mqtt_message", handle_simulate_mqtt_message)
+
+        # 异步启动 MQTT 长连接
+        if hasattr(entry, "async_create_background_task"):
+            entry.async_create_background_task(hass, mqtt_manager.start(), "Hisense MQTT Client")
+        else:
+            hass.async_create_task(mqtt_manager.start())
+
     platforms = [
         "climate",
         "switch",
@@ -165,7 +427,17 @@ async def async_unload_entry(hass: core.HomeAssistant, entry: config_entries.Con
     ]
     unload_ok = await hass.config_entries.async_unload_platforms(entry, platforms)
     if unload_ok:
+        mqtt_manager = hass.data[DOMAIN].pop(f"{entry.entry_id}_mqtt", None)
+        if mqtt_manager and isinstance(mqtt_manager, HisenseMQTTManager):
+            await mqtt_manager.stop()
+
         for coordinator in hass.data[DOMAIN].get(entry.entry_id, {}).values():
             await coordinator.async_cancel_refresh()
         hass.data[DOMAIN].pop(entry.entry_id, None)
+
+        # 若无存活 entry，注销测试服务
+        active_entries = [k for k in hass.data[DOMAIN] if not k.endswith("_mqtt")]
+        if not active_entries and hass.services.has_service(DOMAIN, "simulate_mqtt_message"):
+            hass.services.async_remove(DOMAIN, "simulate_mqtt_message")
+
     return unload_ok

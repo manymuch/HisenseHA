@@ -50,6 +50,8 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         #: 上一次成功读到云端数据的本地时刻。设备自己报的 ``reportTime``
         #: 缺失时（少数机型）用它兜底，让「上次数据更新时间」实体始终有值。
         self.last_success_time: datetime | None = None
+        self.last_push: dict[str, Any] | None = None
+        self.push_history: list[dict[str, Any]] = []
         super().__init__(
             hass,
             _LOGGER,

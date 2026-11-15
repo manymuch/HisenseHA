@@ -1,0 +1,38 @@
+simulate_mqtt_message:
+  name: 模拟海信 MQTT 消息
+  description: 模拟云端通过 MQTT 协议下发设备状态变更消息，用于验证长连接监听与“洗衣完成”等自动化触发。
+  fields:
+    device_id:
+      name: 设备 ID
+      description: 目标海信设备 ID。留空则推送到该账号下的所有设备。
+      required: false
+      example: "86100c000102005000000000000000000000:1wfx1200000000000000000"
+      selector:
+        text:
+    status:
+      name: 模拟状态
+      description: 模拟的设备状态，例如 "complete"（完成）、"running"（运行中）、"standby"（待机）、"off"（关机）。
+      required: false
+      example: "complete"
+      selector:
+        select:
+          options:
+            - "complete"
+            - "running"
+            - "standby"
+            - "paused"
+            - "off"
+    refresh_cloud:
+      name: 是否立即拉取云端覆盖
+      description: 默认关闭。如果开启，将在模拟推送后立即发起海信云端 HTTP 轮询；关闭时保持模拟状态，供自动化检测和测试。
+      required: false
+      default: false
+      selector:
+        boolean:
+    raw_payload:
+      name: 自定义 JSON Payload
+      description: 可选的高级参数，模拟下发完整的原始 MQTT JSON 报文。
+      required: false
+      example: '{"businessTag":"JHkDeviceChangeBizMessage","deviceId":"123456","action":"onDeviceStateUpdate"}'
+      selector:
+        object:
