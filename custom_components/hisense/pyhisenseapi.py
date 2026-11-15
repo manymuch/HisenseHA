@@ -66,12 +66,12 @@ _WASHER_DRY_SETTING_LABELS = {
     1: "ready_to_wear",
     2: "ironing",
     3: "storage",
-    4: "timed_dry_level_1",
-    5: "timed_dry_level_2",
-    6: "timed_dry_level_3",
-    7: "timed_dry_level_4",
-    8: "timed_dry_level_5",
-    9: "timed_dry_level_6",
+    4: "timed_30m",
+    5: "timed_1h",
+    6: "timed_1_5h",
+    7: "timed_2h",
+    8: "timed_3h",
+    9: "timed_4h",
 }
 # The named-states format reports the actual wash temperature in degrees
 # Celsius instead of the numbered index used by the legacy array format.
@@ -922,8 +922,110 @@ class _HiSenseDevice:
         return self.get_status()
 
 
+WASHER_PROGRAM_MAP = {
+    "混合": 2,
+    "大件": 4,
+    "运动服": 5,
+    "单脱": 10,
+    "漂+脱": 11,
+    "内衣": 12,
+    "羽绒": 13,
+    "丝绸": 14,
+    "羊毛": 15,
+    "童装": 19,
+    "AI智洗": 22,
+    "单烘": 35,
+    "42′洗烘": 36,
+    "空气洗": 38,
+    "速净": 40,
+    "蒸汽除螨": 41,
+    "除毛洗": 43,
+    "血渍": 52,
+    "酒渍": 53,
+    "草渍": 54,
+    "泥渍": 55,
+    "咖啡渍": 56,
+    "果汁渍": 57,
+    "毛绒玩具": 65,
+    "橡胶玩具": 67,
+    "食物渍": 68,
+    "妆渍": 69,
+    "奶渍": 70,
+    "汗渍": 71,
+    "油污渍": 72,
+    "快蒸消毒": 73,
+    "筒清洁": 75,
+    "AI洗烘": 88,
+    "羊毛烘": 89,
+    "丝绸烘": 90,
+    "羽绒烘": 91,
+    "大件烘": 95,
+}
+WASHER_PROGRAM_REVERSE_MAP = {
+    **{v: k for k, v in WASHER_PROGRAM_MAP.items()},
+    **{str(v): k for k, v in WASHER_PROGRAM_MAP.items()},
+}
+
+WASHER_DOSAGE_MAP = {
+    "140%": "6",
+    "120%": "3",
+    "100%": "2",
+    "80%": "1",
+    "60%": "5",
+    "关闭": "4",
+}
+WASHER_DOSAGE_REVERSE_MAP = {v: k for k, v in WASHER_DOSAGE_MAP.items()}
+
+WASHER_SPIN_MAP = {
+    "不脱水": "0",
+    "400 转": "400",
+    "600 转": "600",
+    "800 转": "800",
+    "1000 转": "1000",
+    "1200 转": "1200",
+    "1400 转": "1400",
+}
+WASHER_SPIN_REVERSE_MAP = {v: k for k, v in WASHER_SPIN_MAP.items()}
+
+WASHER_TEMP_MAP = {
+    "冷水": "0",
+    "20℃": "20",
+    "30℃": "30",
+    "40℃": "40",
+    "60℃": "60",
+    "90℃": "90",
+}
+WASHER_TEMP_REVERSE_MAP = {v: k for k, v in WASHER_TEMP_MAP.items()}
+
+WASHER_RINSE_MAP = {
+    "1次": "1",
+    "2次": "2",
+    "3次": "3",
+    "4次": "4",
+    "5次": "5",
+}
+WASHER_RINSE_REVERSE_MAP = {v: k for k, v in WASHER_RINSE_MAP.items()}
+
+WASHER_DRY_MAP = {
+    "关闭": "0",
+    "即穿": "1",
+    "即熨": "2",
+    "即存": "3",
+    "定时30分": "4",
+    "定时1小时": "5",
+    "定时1.5小时": "6",
+    "定时2小时": "7",
+    "定时3小时": "8",
+    "定时4小时": "9",
+}
+WASHER_DRY_REVERSE_MAP = {
+    **{v: k for k, v in WASHER_DRY_MAP.items()},
+    **{int(v): k for k, v in WASHER_DRY_MAP.items() if str(v).isdigit()},
+}
+
+
 class HiSenseWasher(_HiSenseDevice):
-    """Read-only AIHome client for Hisense washers."""
+    """AIHome client for Hisense washers with state monitoring and control."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -933,6 +1035,8 @@ class HiSenseWasher(_HiSenseDevice):
             "protocol_raw_values": [],
             "protocol_changed_indices": [],
             "protocol_nonzero_values": {},
+            "wash_time": None,
+            "softbaking": False,
         }
 
     @classmethod
@@ -1086,17 +1190,30 @@ class HiSenseWasher(_HiSenseDevice):
 
         temperature = _as_int(states.get("washTemperature"))
         dry_value = _as_int(states.get("dry"))
+        drying_method = _as_int(states.get("dryingMethod"))
+        if drying_method is None:
+            drying_method = dry_value
+        is_drying = drying_method is not None and drying_method > 0
+        spin_speed = (
+            _as_int(states.get("dehydrationDrySwitch"))
+            if is_drying and states.get("dehydrationDrySwitch") is not None and str(states.get("dehydrationDrySwitch")) != "--"
+            else _as_int(states.get("dehydrationSpeed"))
+        )
+        drying_modes = _as_int(states.get("dryingModes"))
         door = states.get("doorLockStatus")
+        work_mode = _as_int(states.get("workMode"))
         updates = {
             "machine_state": machine_state,
             "run_state": run_state,
             "power_on": power_on,
-            "program": _as_int(states.get("workMode")),
+            "program": work_mode,
+            "program_code": work_mode,
+            "program_name": WASHER_PROGRAM_REVERSE_MAP.get(str(work_mode), "未知"),
             "remaining_minutes": _as_int(states.get("remainRunTime")),
             "fault": _as_int(states.get("fault")),
             "motor_speed": _as_int(states.get("rotarySpeed")),
             "temperature_raw": temperature,
-            "configured_spin": _as_int(states.get("dehydrationSpeed")),
+            "configured_spin": spin_speed,
             "configured_temperature": (
                 (
                     "ambient"
@@ -1109,12 +1226,26 @@ class HiSenseWasher(_HiSenseDevice):
                 else None
             ),
             "dry_setting": (
-                _WASHER_DRY_SETTING_LABELS.get(dry_value, f"unknown_{dry_value}")
-                if dry_value is not None
+                _WASHER_DRY_SETTING_LABELS.get(drying_method, f"unknown_{drying_method}")
+                if drying_method is not None
                 else None
             ),
             "gate_locked": None if door in (None, "--") else str(door) == "1",
             "child_lock": _flag("childLock"),
+            "detergent_mode": states.get("detergentMode"),
+            "soften_mode": states.get("softenMode"),
+            "detergent_lack": _as_int(states.get("detergentLackStatus")),
+            "water_consumption": states.get("waterConsumption"),
+            "power_consumption": states.get("powerConsumption"),
+            "start_pause_status": _flag("startPauseStatus"),
+            "rinsing_frequency": _as_int(states.get("rinsingFrequency")),
+            "wash_temperature": temperature,
+            "dehydration_speed": spin_speed,
+            "dry_value": dry_value,
+            "drying_method": drying_method,
+            "drying_modes": drying_modes,
+            "softbaking": str(states.get("dryingModes")) == "1" if states.get("dryingModes") is not None else False,
+            "wash_time": _as_int(states.get("washTime")),
         }
         updates = {key: value for key, value in updates.items() if value is not None}
         self._store_states(updates, states)
@@ -1134,7 +1265,8 @@ class HiSenseWasher(_HiSenseDevice):
             return None
         states = self._detail_states(result)
         if states is not None:
-            self._update_from_states(states)
+            fresh_keys = self._update_from_states(states)
+            self._reconcile_pending_status(fresh_keys)
             return self.get_status()
         if not self._status_success(result):
             _LOGGER.warning("Hisense AIHome washer status failed: %s", self._response_summary(result))
@@ -1143,13 +1275,236 @@ class HiSenseWasher(_HiSenseDevice):
             return None
         return self.get_status()
 
-    async def _send_aihome_action(self, command, params, *, source_name=None):
-        """Keep washer support read-only even if an inherited method is called."""
+    async def _send_aihome_action(self, command, params=None, *, source_name="smartlifeApp"):
+        """Send a control command to the Hisense washer and update status on success."""
+        if not await self.refresh():
+            return False
+        if isinstance(command, list):
+            actions = command
+        else:
+            actions = [self._action(command, params or {})]
+        for attempt in range(2):
+            request_token = self.access_token
+            try:
+                result = await self._post(
+                    self.session, request_token, self.customer_id,
+                    "/4.0/iot/devices/execute", actions, execute=True,
+                    device_id=self.device_id, partner_id=self.partner_id,
+                    source_name=source_name,
+                )
+            except Exception:
+                _LOGGER.error("Hisense AIHome washer control request failed", exc_info=True)
+                return False
+            if self._success(result):
+                states = (result.get("payload") or {}).get("states")
+                if isinstance(states, dict):
+                    fresh_keys = self._update_from_states(states)
+                    self._reconcile_pending_status(fresh_keys)
+                return True
+            if (
+                attempt == 0
+                and self._auth_failure(result)
+                and await self.refresh(force=True, previous_token=request_token)
+            ):
+                continue
+            if self._auth_failure(result):
+                self._notify_auth_failure()
+            _LOGGER.warning(
+                "Hisense AIHome washer control failed: %s",
+                self._response_summary(result),
+            )
+            return False
         return False
 
-    async def _send_aihome_label(self, label_key: str, label_value) -> bool:
-        """Keep washer support read-only even if an inherited method is called."""
-        return False
+    async def set_power(self, power: bool) -> bool:
+        """Turn washer power on or off."""
+        val = "1" if power else "0"
+        ok = await self._send_aihome_action(
+            "connector.device.command.Power",
+            {"onAndOff": {"value": val}},
+            source_name=self.POWER_SOURCE_NAME,
+        )
+        if ok:
+            self._set_pending_status({
+                "power_on": bool(power),
+                "machine_state": "standby" if power else "off",
+            })
+        return ok
+
+    async def set_start_stop(self, start: bool) -> bool:
+        """Start (1) or pause/stop (0) the washer."""
+        val = "1" if start else "0"
+        ok = await self._send_aihome_action(
+            "connector.device.command.Switch",
+            {"startAndStop": {"value": val}},
+        )
+        if ok:
+            self._set_pending_status({
+                "start_pause_status": bool(start),
+                "machine_state": "running" if start else "paused",
+            })
+        return ok
+
+    async def set_child_lock(self, lock: bool) -> bool:
+        """Set child lock on or off."""
+        val = "1" if lock else "0"
+        ok = await self._send_aihome_action(
+            "connector.device.command.SetChildLock",
+            {"childLock": {"value": val}},
+        )
+        if ok:
+            self._set_pending_status({"child_lock": bool(lock)})
+        return ok
+
+    async def set_mode(self, mode: int | str) -> bool:
+        """Set wash mode/program."""
+        val_str = str(mode)
+        ok = await self._send_aihome_action(
+            "connector.device.command.SetModes",
+            {"modes": {"value": val_str}},
+        )
+        if ok:
+            mode_int = int(val_str) if val_str.isdigit() else 0
+            self._set_pending_status({
+                "program": mode_int,
+                "program_code": mode_int,
+                "program_name": WASHER_PROGRAM_REVERSE_MAP.get(val_str, "未知"),
+            })
+        return ok
+
+    async def set_detergent_mode(self, mode: int | str) -> bool:
+        """Set detergent dosage mode."""
+        val_str = str(mode)
+        ok = await self._send_aihome_action(
+            "connector.device.command.SetDetergentMode",
+            {"detergentMode": {"value": val_str}},
+        )
+        if ok:
+            self._set_pending_status({"detergent_mode": val_str})
+        return ok
+
+    async def set_soften_mode(self, mode: int | str) -> bool:
+        """Set softener dosage mode."""
+        val_str = str(mode)
+        ok = await self._send_aihome_action(
+            "connector.device.command.SetSoftenMode",
+            {"softenMode": {"value": val_str}},
+        )
+        if ok:
+            self._set_pending_status({"soften_mode": val_str})
+        return ok
+
+    async def set_spin_speed(self, speed: int | str) -> bool:
+        """Set washer spin/dehydration speed."""
+        speed_str = str(speed)
+        dry_val = str(self.status.get("drying_method", self.status.get("dry_value", "0")))
+        is_drying_active = dry_val not in ("0", "None", "")
+        if is_drying_active:
+            ok = await self._send_aihome_action(
+                "connector.device.command.setDehydrationDrySwitch",
+                {"dehydrationDrySwitch": {"value": speed_str}},
+            )
+        else:
+            ok = await self._send_aihome_action(
+                "connector.device.command.SetDehydrationSpeed",
+                {"dehydrationSpeed": {"value": speed_str}},
+            )
+        if ok:
+            speed_int = int(speed_str) if speed_str.isdigit() else speed_str
+            self._set_pending_status({
+                "configured_spin": speed_int,
+                "dehydration_speed": speed_int,
+                "dehydrationDrySwitch": speed_str,
+            })
+        return ok
+
+    async def set_temperature(self, temp: int | str) -> bool:
+        """Set wash water temperature."""
+        temp_str = str(temp)
+        ok = await self._send_aihome_action(
+            "connector.device.command.SetWashTemperature",
+            {"washTemperature": {"value": temp_str}},
+        )
+        if ok:
+            temp_int = int(temp_str) if temp_str.isdigit() else 0
+            self._set_pending_status({
+                "wash_temperature": temp_int,
+                "temperature_raw": temp_int,
+                "configured_temperature": (
+                    "ambient"
+                    if temp_int == 0
+                    else f"temperature_{temp_int}_c"
+                    if temp_int in _WASHER_STATES_TEMPERATURE_VALUES
+                    else f"unknown_{temp_int}"
+                ),
+            })
+        return ok
+
+    async def set_rinse_count(self, count: int | str) -> bool:
+        """Set wash rinsing frequency."""
+        cnt_str = str(count)
+        ok = await self._send_aihome_action(
+            "connector.device.command.SetRinsingFrequency",
+            {"rinsingFrequency": {"value": cnt_str}},
+        )
+        if ok:
+            cnt_int = int(cnt_str) if cnt_str.isdigit() else 0
+            self._set_pending_status({"rinsing_frequency": cnt_int})
+        return ok
+
+    async def set_dry_mode(self, mode: int | str) -> bool:
+        """Set washer drying method."""
+        val_str = str(mode)
+        if val_str == "0":
+            spin = self.status.get("dehydration_speed", 1400)
+            actions = [
+                self._action("connector.device.command.SetDryingMethod", {"dryingMethod": {"value": "0"}}),
+                self._action("connector.device.command.SetDehydrationSpeed", {"dehydrationSpeed": {"value": str(spin)}}),
+            ]
+            ok = await self._send_aihome_action(actions)
+        else:
+            ok = await self._send_aihome_action(
+                "connector.device.command.SetDryingMethod",
+                {"dryingMethod": {"value": val_str}},
+            )
+        if ok:
+            val_int = int(val_str) if val_str.isdigit() else 0
+            updates = {
+                "drying_method": val_int,
+                "dry_value": val_int,
+                "dry_setting": _WASHER_DRY_SETTING_LABELS.get(val_int, f"unknown_{val_int}"),
+            }
+            if val_str == "0":
+                spin_val = self.status.get("dehydration_speed", 1400)
+                updates["dehydration_speed"] = spin_val
+                updates["configured_spin"] = spin_val
+            self._set_pending_status(updates)
+        return ok
+
+    async def set_softbaking(self, enabled: bool) -> bool:
+        """Set washer softbaking / low-temperature drying."""
+        ok = await self._send_aihome_action(
+            "connector.device.command.SetDryingModes",
+            {"dryingModes": {"value": "1" if enabled else "0"}},
+        )
+        if ok:
+            self._set_pending_status({
+                "softbaking": bool(enabled),
+                "drying_modes": 1 if enabled else 0,
+            })
+        return ok
+
+    async def set_wash_time(self, minutes: int | str) -> bool:
+        """Set washer washing time in minutes."""
+        val = str(minutes).strip().replace("分钟", "").replace("分", "")
+        ok = await self._send_aihome_action(
+            "connector.device.command.SetWashTime",
+            {"washTime": {"value": val}},
+        )
+        if ok:
+            min_int = int(val) if val.isdigit() else 0
+            self._set_pending_status({"wash_time": min_int})
+        return ok
 
     def get_status(self):
         return json.loads(json.dumps(self.status))
@@ -1166,6 +1521,8 @@ class HiSenseDryer(_HiSenseDevice):
             "protocol_raw_values": [],
             "protocol_changed_indices": [],
             "protocol_nonzero_values": {},
+            "wash_time": None,
+            "softbaking": False,
         }
 
     def _update_from_states(self, states: dict):

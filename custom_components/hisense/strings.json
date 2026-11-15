@@ -83,6 +83,9 @@
       },
       "fridge_quiet_mode": {
         "name": "Smart noise reduction"
+      },
+      "washer_softbaking": {
+        "name": "Softbaking"
       }
     },
     "button": {
@@ -124,6 +127,49 @@
           "母婴": "Baby care",
           "冰鲜": "Chilled",
           "零度": "Zero degree"
+        }
+      },
+      "washer_program_select": {
+        "name": "Wash Program"
+      },
+      "washer_detergent_select": {
+        "name": "Detergent Dosage"
+      },
+      "washer_soften_select": {
+        "name": "Softener Dosage"
+      },
+      "washer_temperature_select": {
+        "name": "Wash Temperature"
+      },
+      "washer_wash_time_select": {
+        "name": "Wash Time"
+      },
+      "washer_rinse_select": {
+        "name": "Rinse Count"
+      },
+      "washer_spin_select": {
+        "name": "Spin Speed"
+      },
+      "washer_dry_select": {
+        "name": "Drying Mode",
+        "state": {
+          "关闭": "Off",
+          "即穿": "Ready to wear",
+          "即熨": "Ironing",
+          "即存": "Storage",
+          "定时30分": "30 minutes",
+          "定时1小时": "1 hour",
+          "定时1.5小时": "1.5 hours",
+          "定时2小时": "2 hours",
+          "定时3小时": "3 hours",
+          "定时4小时": "4 hours"
+        }
+      },
+      "washer_softbaking_select": {
+        "name": "Low-Temp Drying",
+        "state": {
+          "关闭": "Off",
+          "开启": "On"
         }
       }
     },
@@ -216,8 +262,17 @@
           "timed_dry_level_3": "Timed dry level 3",
           "timed_dry_level_4": "Timed dry level 4",
           "timed_dry_level_5": "Timed dry level 5",
-          "timed_dry_level_6": "Timed dry level 6"
+          "timed_dry_level_6": "Timed dry level 6",
+          "timed_30m": "30 minutes",
+          "timed_1h": "1 hour",
+          "timed_1_5h": "1.5 hours",
+          "timed_2h": "2 hours",
+          "timed_3h": "3 hours",
+          "timed_4h": "4 hours"
         }
+      },
+      "washer_wash_time": {
+        "name": "Wash Time"
       },
       "dryer_run_state": {
         "name": "Run state",

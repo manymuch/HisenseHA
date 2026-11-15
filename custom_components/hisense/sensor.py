@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from datetime import datetime
+from typing import Any
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -84,6 +87,12 @@ WASHER_SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
         key="dry_setting",
         translation_key="washer_dry_setting",
         icon="mdi:tumble-dryer",
+    ),
+    SensorEntityDescription(
+        key="wash_time",
+        translation_key="washer_wash_time",
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        icon="mdi:clock-outline",
     ),
 )
 
@@ -229,12 +238,21 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     dryer_coordinators = [
         coordinator
         for coordinator in coordinators.values()
-        if coordinator.device_type == "干衣机"
+        if getattr(coordinator, "device_type", None) == "干衣机"
     ]
     async_add_entities(
         HisenseDryerSensor(coordinator, description)
         for coordinator in dryer_coordinators
         for description in DRYER_SENSOR_DESCRIPTIONS
+    )
+
+    valid_coordinators = [
+        c for c in coordinators.values()
+        if hasattr(c, "client") and hasattr(c.client, "device_id")
+    ]
+    async_add_entities(
+        HisensePushMessageSensor(coordinator)
+        for coordinator in valid_coordinators
     )
 
 
@@ -406,3 +424,46 @@ class HisenseACEnergySensor(HisenseEntity, SensorEntity):
     def last_reset(self) -> datetime:
         """The App values are cumulative for the current local calendar day."""
         return dt_util.start_of_local_day()
+
+
+class HisensePushMessageSensor(HisenseEntity, SensorEntity):
+    """Expose the latest received push notification message and history."""
+
+    _attr_translation_key = "last_push_message"
+    _attr_icon = "mdi:bell-ring-outline"
+    _attr_available_offline = True
+
+    def __init__(self, coordinator) -> None:
+        super().__init__(
+            coordinator,
+            "last_push_message",
+            "last_push_message",
+            "mdi:bell-ring-outline",
+        )
+        self._attr_name = "最新推送内容"
+
+    @property
+    def native_value(self) -> str:
+        push_info = getattr(self.coordinator, "last_push", None)
+        if not push_info or not isinstance(push_info, dict):
+            return "就绪 (监听推送中)"
+        return push_info.get("summary") or push_info.get("status") or "收到新推送"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        push_info = getattr(self.coordinator, "last_push", None)
+        history = getattr(self.coordinator, "push_history", [])
+        attrs: dict[str, Any] = {
+            "total_pushes_received": len(history),
+            "recent_history": list(reversed(history[-10:])),
+        }
+        if isinstance(push_info, dict):
+            attrs.update({
+                "last_received_at": push_info.get("timestamp"),
+                "status": push_info.get("status"),
+                "action": push_info.get("action"),
+                "business_tag": push_info.get("businessTag"),
+                "device_id": push_info.get("deviceId"),
+                "raw_payload": push_info.get("raw"),
+            })
+        return attrs

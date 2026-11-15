@@ -4,6 +4,7 @@ from homeassistant.exceptions import HomeAssistantError
 from .const import DOMAIN
 from .entity import HisenseEntity
 from .fridge_const import WORK_MODE_STATUS_KEYS
+from .pyhisenseapi import WASHER_PROGRAM_REVERSE_MAP
 
 import logging
 
@@ -37,6 +38,20 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
             ("QUIET", "fridge_quiet_mode"),
         ):
             _add_fridge_ai_switch(coordinator, async_add_entities, mode, key, config_entry)
+
+    washer_coordinators = [
+        c for c in coordinators.values() if c.device_type == "洗衣机"
+    ]
+    washer_entities = []
+    for coordinator in washer_coordinators:
+        washer_entities.extend([
+            HisenseWasherPowerSwitch(coordinator),
+            HisenseWasherStartPauseSwitch(coordinator),
+            HisenseWasherChildLockSwitch(coordinator),
+            HisenseWasherSoftbakingSwitch(coordinator),
+        ])
+    if washer_entities:
+        async_add_entities(washer_entities)
 
 
 
@@ -298,3 +313,126 @@ class PromptSoundSwitch(HisenseEntity, SwitchEntity):
             self.coordinator.async_update_from_client()
             return
         raise HomeAssistantError("Failed to turn off Hisense AC prompt sound")
+
+
+class HisenseWasherPowerSwitch(HisenseEntity, SwitchEntity):
+    _attr_translation_key = "washer_power"
+    _attr_icon = "mdi:power"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "washer_power", "washer_power", "mdi:power")
+
+    @property
+    def is_on(self):
+        return self.status.get("power_on")
+
+    async def async_turn_on(self):
+        if await self.client.set_power(True):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("海信洗衣机硬件安全策略限制：关机状态下不支持远程通电开机，请在物理面板按电源键开机")
+
+    async def async_turn_off(self):
+        if await self.client.set_power(False):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("远程关机失败")
+
+
+class HisenseWasherStartPauseSwitch(HisenseEntity, SwitchEntity):
+    _attr_translation_key = "washer_start_pause"
+    _attr_icon = "mdi:play-pause"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "washer_start_pause", "washer_start_pause", "mdi:play-pause")
+
+    @property
+    def is_on(self):
+        return self.status.get("run_state") == 1
+
+    async def async_turn_on(self):
+        if not self.status.get("power_on"):
+            raise HomeAssistantError("洗衣机已关机，请先开启洗衣机面板电源")
+        if await self.client.set_start_stop(True):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("启动洗衣机失败（请检查机门是否关严或面板是否开启远程控制）")
+
+    async def async_turn_off(self):
+        if not self.status.get("power_on"):
+            raise HomeAssistantError("洗衣机已关机")
+        if await self.client.set_start_stop(False):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("暂停洗衣机失败")
+
+
+class HisenseWasherChildLockSwitch(HisenseEntity, SwitchEntity):
+    _attr_translation_key = "washer_child_lock"
+    _attr_icon = "mdi:lock"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "washer_child_lock", "washer_child_lock", "mdi:lock")
+
+    @property
+    def is_on(self):
+        return self.status.get("child_lock")
+
+    async def async_turn_on(self):
+        if not self.status.get("power_on"):
+            raise HomeAssistantError("洗衣机已关机，无法设置童锁（需开机运转中设置）")
+        if not self.status.get("run_state"):
+            raise HomeAssistantError("海信洗衣机硬件安全规范：未在洗涤运转中不可设置童锁，请在机器启动洗涤后开启或关闭童锁")
+        if self.status.get("start_pause_status"):
+            raise HomeAssistantError("暂停状态下，童锁不可设")
+        if await self.client.set_child_lock(True):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("设置童锁失败")
+
+    async def async_turn_off(self):
+        if not self.status.get("power_on"):
+            raise HomeAssistantError("洗衣机已关机，无法设置童锁")
+        if not self.status.get("run_state"):
+            raise HomeAssistantError("海信洗衣机硬件安全规范：未在洗涤运转中不可设置童锁")
+        if self.status.get("start_pause_status"):
+            raise HomeAssistantError("暂停状态下，童锁不可设")
+        if await self.client.set_child_lock(False):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("关闭童锁失败")
+
+
+class HisenseWasherSoftbakingSwitch(HisenseEntity, SwitchEntity):
+    _attr_translation_key = "washer_softbaking"
+    _attr_icon = "mdi:snowflake-thermometer"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "washer_softbaking", "washer_softbaking", "mdi:snowflake-thermometer")
+
+    @property
+    def is_on(self):
+        return bool(self.status.get("softbaking") or self.status.get("drying_modes") == 1)
+
+    async def async_turn_on(self):
+        if not self.status.get("power_on"):
+            raise HomeAssistantError("洗衣机已关机，请先开启洗衣机面板电源")
+        cur_program = str(self.status.get("program_code", self.status.get("program", "")))
+        if cur_program not in ("35", "Single_dry"):
+            prog_name = self.status.get("program_name") or WASHER_PROGRAM_REVERSE_MAP.get(cur_program, "当前程序")
+            raise HomeAssistantError(
+                f"海信洗衣机硬件固件限制：【低温烘】属于【单烘】程序的专属烘干模式（与标准烘对应，可搭配即穿/即存或定时烘干共存）。"
+                f"当前程序为【{prog_name}】，固件不支持在此程序下开启低温烘。请先在“洗衣程序”中切换为【单烘】，即可开启低温烘！"
+            )
+        if await self.client.set_softbaking(True):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("开启低温烘失败")
+
+    async def async_turn_off(self):
+        if not self.status.get("power_on"):
+            raise HomeAssistantError("洗衣机已关机，请先开启洗衣机面板电源")
+        if await self.client.set_softbaking(False):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("关闭低温烘失败")
