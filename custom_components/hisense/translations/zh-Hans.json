@@ -48,12 +48,26 @@
     },
     "hisense_dryer": {
       "name": "海信干衣机"
+    },
+    "hisense_water_heater": {
+      "name": "海信热水器"
     }
   },
   "entity": {
     "climate": {
       "thermostat": {
         "name": "空调"
+      }
+    },
+    "water_heater": {
+      "water_heater": {
+        "name": "热水器",
+        "state": {
+          "即时加热": "即时加热",
+          "中温节能": "中温节能",
+          "水质巡航": "水质巡航",
+          "大水量": "大水量"
+        }
       }
     },
     "switch": {
@@ -83,6 +97,9 @@
       },
       "fridge_quiet_mode": {
         "name": "智能降噪"
+      },
+      "water_heater_power": {
+        "name": "电源"
       }
     },
     "button": {

@@ -48,12 +48,26 @@
     },
     "hisense_dryer": {
       "name": "Hisense Dryer"
+    },
+    "hisense_water_heater": {
+      "name": "Hisense Water Heater"
     }
   },
   "entity": {
     "climate": {
       "thermostat": {
         "name": "Climate"
+      }
+    },
+    "water_heater": {
+      "water_heater": {
+        "name": "Water Heater",
+        "state": {
+          "即时加热": "Instant Heating",
+          "中温节能": "Eco Mode",
+          "水质巡航": "Water Sterilizing",
+          "大水量": "Large Water"
+        }
       }
     },
     "switch": {
@@ -83,6 +97,9 @@
       },
       "fridge_quiet_mode": {
         "name": "Smart noise reduction"
+      },
+      "water_heater_power": {
+        "name": "Power"
       }
     },
     "button": {
