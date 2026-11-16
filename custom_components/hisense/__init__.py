@@ -3,9 +3,10 @@ import asyncio
 from homeassistant import config_entries, core
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
+
 from .const import CONF_PASSWORD, CONF_USERNAME, DOMAIN
 from .coordinator import HisenseDataUpdateCoordinator
-from .pyhisenseapi import HiSenseAC, HiSenseDryer, HiSenseFridge, HiSenseWasher
+from .pyhisenseapi import HiSenseAC, HiSenseDryer, HiSenseFridge, HiSenseWasher, HiSenseWaterHeater
 
 
 async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.ConfigEntry):
@@ -113,6 +114,23 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
                 on_token_refresh=save_tokens,
                 token_lock=token_lock,
             )
+        elif device_type == "热水器":
+            client = HiSenseWaterHeater(
+                wifi_id=wifi_id,
+                device_id=device_id,
+                refresh_token=refresh_token,
+                session=session,
+                device_name=friendly_name,
+                entity_name=entity_name,
+                home_id=home_id,
+                access_token=access_token,
+                customer_id=customer_id,
+                partner_id=partner_id,
+                username=username,
+                password=password,
+                on_token_refresh=save_tokens,
+                token_lock=token_lock,
+            )
         else:
             client = HiSenseAC(
                 wifi_id=wifi_id,
@@ -148,6 +166,7 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
         "sensor",
         "binary_sensor",
         "select",
+        "water_heater",
     ]
     await hass.config_entries.async_forward_entry_setups(entry, platforms)
     return True
@@ -162,6 +181,7 @@ async def async_unload_entry(hass: core.HomeAssistant, entry: config_entries.Con
         "sensor",
         "binary_sensor",
         "select",
+        "water_heater",
     ]
     unload_ok = await hass.config_entries.async_unload_platforms(entry, platforms)
     if unload_ok:

@@ -30,7 +30,7 @@ _MAX_ATTEMPTS = 3
 #: 轮询再快也拿不到更新的数据，只会白耗请求额度。空调/洗衣机保持原来的
 #: 事件驱动（不轮询），因为它们的操作都发生在 HA 里，控制后 1 秒就会回读。
 _FRIDGE_SCAN_INTERVAL = 60
-
+_WATER_HEATER_SCAN_INTERVAL = 60
 
 
 class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -57,6 +57,8 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=(
                 timedelta(seconds=_FRIDGE_SCAN_INTERVAL)
                 if device_type == "冰箱"
+                else timedelta(seconds=_WATER_HEATER_SCAN_INTERVAL)
+                if device_type == "热水器"   # <--- 新增热水器判断
                 else None
             ),
         )
