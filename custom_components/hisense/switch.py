@@ -348,7 +348,7 @@ class HisenseWasherStartPauseSwitch(HisenseEntity, SwitchEntity):
 
     @property
     def is_on(self):
-        return self.status.get("run_state") == 1
+        return bool(self.status.get("is_running") or self.status.get("machine_state") == "running")
 
     async def async_turn_on(self):
         if not self.status.get("power_on"):
@@ -381,7 +381,7 @@ class HisenseWasherChildLockSwitch(HisenseEntity, SwitchEntity):
     async def async_turn_on(self):
         if not self.status.get("power_on"):
             raise HomeAssistantError("洗衣机已关机，无法设置童锁（需开机运转中设置）")
-        if not self.status.get("run_state"):
+        if not (self.status.get("is_running") or self.status.get("machine_state") == "running" or self.status.get("run_state")):
             raise HomeAssistantError("海信洗衣机硬件安全规范：未在洗涤运转中不可设置童锁，请在机器启动洗涤后开启或关闭童锁")
         if self.status.get("start_pause_status"):
             raise HomeAssistantError("暂停状态下，童锁不可设")
@@ -393,7 +393,7 @@ class HisenseWasherChildLockSwitch(HisenseEntity, SwitchEntity):
     async def async_turn_off(self):
         if not self.status.get("power_on"):
             raise HomeAssistantError("洗衣机已关机，无法设置童锁")
-        if not self.status.get("run_state"):
+        if not (self.status.get("is_running") or self.status.get("machine_state") == "running" or self.status.get("run_state")):
             raise HomeAssistantError("海信洗衣机硬件安全规范：未在洗涤运转中不可设置童锁")
         if self.status.get("start_pause_status"):
             raise HomeAssistantError("暂停状态下，童锁不可设")

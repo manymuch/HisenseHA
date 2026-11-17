@@ -922,6 +922,18 @@ class _HiSenseDevice:
         return self.get_status()
 
 
+WASHER_RUN_STATUS_PHASES = {
+    0: "standby",
+    1: "reservation_wait",
+    2: "main_wash",
+    3: "rinse",
+    4: "spin",
+    5: "drying",
+    7: "complete",
+    10: "air_dry",
+    11: "fresh_care",
+}
+
 WASHER_PROGRAM_MAP = {
     "混合": 2,
     "大件": 4,
@@ -1173,20 +1185,41 @@ class HiSenseWasher(_HiSenseDevice):
             return _as_bool(value)
 
         power_on = _flag("powerStatus")
-        run_state = _as_int(states.get("runStatus"))
-        paused = _flag("startPauseStatus")
+        run_status_raw = _as_int(states.get("runStatus"))
+        start_pause_raw = _as_int(states.get("startPauseStatus"))
+        start_stop_raw = _as_int(states.get("startStop"))
+
         if power_on is None:
             machine_state = None
+            is_running = False
         elif not power_on:
             machine_state = "off"
-        elif paused:
+            is_running = False
+        elif run_status_raw == 7:
+            machine_state = "complete"
+            is_running = False
+        elif start_pause_raw == 1:
             machine_state = "paused"
-        elif run_state == 1:
+            is_running = False
+        elif (
+            start_pause_raw == 2
+            or start_stop_raw == 1
+            or (run_status_raw is not None and run_status_raw in (2, 3, 4, 5, 6, 10, 11))
+        ):
             machine_state = "running"
-        elif run_state == 0:
+            is_running = True
+        elif run_status_raw == 0 or start_pause_raw == 0:
             machine_state = "standby"
+            is_running = False
         else:
-            machine_state = f"unknown_{run_state}"
+            machine_state = f"unknown_{run_status_raw}"
+            is_running = False
+
+        phase_label = (
+            WASHER_RUN_STATUS_PHASES.get(run_status_raw, f"unknown_{run_status_raw}")
+            if run_status_raw is not None
+            else None
+        )
 
         temperature = _as_int(states.get("washTemperature"))
         dry_value = _as_int(states.get("dry"))
@@ -1204,7 +1237,11 @@ class HiSenseWasher(_HiSenseDevice):
         work_mode = _as_int(states.get("workMode"))
         updates = {
             "machine_state": machine_state,
-            "run_state": run_state,
+            "is_running": is_running,
+            "run_state": 1 if is_running else 0,
+            "run_status": run_status_raw,
+            "phase": run_status_raw,
+            "phase_label": phase_label,
             "power_on": power_on,
             "program": work_mode,
             "program_code": work_mode,
@@ -1340,6 +1377,8 @@ class HiSenseWasher(_HiSenseDevice):
         )
         if ok:
             self._set_pending_status({
+                "is_running": bool(start),
+                "run_state": 1 if start else 0,
                 "start_pause_status": bool(start),
                 "machine_state": "running" if start else "paused",
             })
@@ -1535,26 +1574,51 @@ class HiSenseDryer(_HiSenseDevice):
             return _as_bool(value)
 
         power_on = _flag("powerStatus")
-        run_state = _as_int(states.get("runStatus"))
-        paused = _flag("startPauseStatus")
+        run_status_raw = _as_int(states.get("runStatus"))
+        start_pause_raw = _as_int(states.get("startPauseStatus"))
+        start_stop_raw = _as_int(states.get("startStop"))
+
         if power_on is None:
             machine_state = None
+            is_running = False
         elif not power_on:
             machine_state = "off"
-        elif paused:
+            is_running = False
+        elif run_status_raw == 7:
+            machine_state = "complete"
+            is_running = False
+        elif start_pause_raw == 1:
             machine_state = "paused"
-        elif run_state == 1:
+            is_running = False
+        elif (
+            start_pause_raw == 2
+            or start_stop_raw == 1
+            or (run_status_raw is not None and run_status_raw in (2, 3, 4, 5, 6, 10, 11))
+        ):
             machine_state = "running"
-        elif run_state == 0:
+            is_running = True
+        elif run_status_raw == 0 or start_pause_raw == 0:
             machine_state = "standby"
+            is_running = False
         else:
-            machine_state = f"unknown_{run_state}"
+            machine_state = f"unknown_{run_status_raw}"
+            is_running = False
+
+        phase_label = (
+            WASHER_RUN_STATUS_PHASES.get(run_status_raw, f"unknown_{run_status_raw}")
+            if run_status_raw is not None
+            else None
+        )
 
         method = states.get("dryingMethod")
         door = states.get("doorLockStatus")
         updates = {
             "machine_state": machine_state,
-            "run_state": run_state,
+            "is_running": is_running,
+            "run_state": 1 if is_running else 0,
+            "run_status": run_status_raw,
+            "phase": run_status_raw,
+            "phase_label": phase_label,
             "power_on": power_on,
             "program": _as_int(states.get("workMode")),
             "remaining_minutes": _as_int(states.get("remainRunTime")),

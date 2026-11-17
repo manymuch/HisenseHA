@@ -223,7 +223,19 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
                         if "runStatus" in change_info:
                             r_val = change_info["runStatus"]
                             r_curr = r_val[0] if isinstance(r_val, list) else r_val
-                            changes.append("运行中" if str(r_curr) == "1" else "已停止/待机")
+                            r_int = int(r_curr) if str(r_curr).isdigit() else None
+                            phase_str = {
+                                0: "待机",
+                                1: "预约等待",
+                                2: "主洗",
+                                3: "漂洗",
+                                4: "脱水",
+                                5: "烘干",
+                                7: "完成",
+                                10: "抖散",
+                                11: "防皱",
+                            }.get(r_int, f"阶段:{r_curr}")
+                            changes.append(f"状态:{phase_str}")
                         if "workMode" in change_info:
                             w_val = change_info["workMode"]
                             w_curr = w_val[0] if isinstance(w_val, list) else w_val
@@ -275,7 +287,19 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
                         else:
                             snapshot.append("开机")
                             r_val = raw_states.get("runStatus")
-                            snapshot.append("运行中" if str(r_val) == "1" else "待机")
+                            r_int = int(r_val) if str(r_val).isdigit() else None
+                            phase_str = {
+                                0: "待机",
+                                1: "预约等待",
+                                2: "主洗",
+                                3: "漂洗",
+                                4: "脱水",
+                                5: "烘干",
+                                7: "完成",
+                                10: "抖散",
+                                11: "防皱",
+                            }.get(r_int, f"阶段:{r_val}")
+                            snapshot.append(f"状态:{phase_str}")
                             w_val = raw_states.get("workMode")
                             if w_val:
                                 w_idx = int(w_val) if str(w_val).isdigit() else w_val
@@ -343,9 +367,9 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
                         is_complete = True
                     elif isinstance(change_info, dict) and "runStatus" in change_info:
                         r_val = change_info["runStatus"]
-                        if isinstance(r_val, list) and len(r_val) >= 2:
-                            if str(r_val[0]) == "0" and str(r_val[1]) == "1":
-                                is_complete = True
+                        r_curr = r_val[0] if isinstance(r_val, list) else r_val
+                        if str(r_curr) == "7":
+                            is_complete = True
 
                     if is_complete:
                         hass.bus.async_fire(

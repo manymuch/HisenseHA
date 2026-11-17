@@ -21,15 +21,11 @@ _RETRY_DELAY = 60.0
 _MAX_ATTEMPTS = 3
 
 #: 冰箱定时轮询间隔（秒）。
-#:
-#: 冰箱是唯一"人不在跟前、状态却要主动看"的设备：门有没有关严、除菌跑完没有、
-#: 压缩机停没停，这些都不会因为用户操作 HA 而触发回读。没有轮询时，这些状态
-#: 只会在 HA 启动/重载或手动点「强制更新」时刷新，门开了几个小时都不会报警。
-#:
-#: 60 秒是折中：设备上报云端本身有节流（抓包里 reportTime 比请求时间晚约 1 分钟），
-#: 轮询再快也拿不到更新的数据，只会白耗请求额度。空调/洗衣机保持原来的
-#: 事件驱动（不轮询），因为它们的操作都发生在 HA 里，控制后 1 秒就会回读。
 _FRIDGE_SCAN_INTERVAL = 60
+#: 洗衣机/干衣机待机轮询间隔（秒）：在用户物理面板按键开机或启动时，最长等待此间隔即可自动检测到状态并更新
+_WASHER_STANDBY_INTERVAL = 30
+#: 洗衣机/干衣机运行中轮询间隔（秒）：运转时自适应加速，精准追踪阶段、剩余时间与电机转速
+_WASHER_RUNNING_INTERVAL = 15
 
 
 
@@ -52,15 +48,19 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.last_success_time: datetime | None = None
         self.last_push: dict[str, Any] | None = None
         self.push_history: list[dict[str, Any]] = []
+        self._was_running = False
+
+        initial_interval = None
+        if device_type == "冰箱":
+            initial_interval = timedelta(seconds=_FRIDGE_SCAN_INTERVAL)
+        elif device_type in ("洗衣机", "干衣机"):
+            initial_interval = timedelta(seconds=_WASHER_STANDBY_INTERVAL)
+
         super().__init__(
             hass,
             _LOGGER,
             name=f"{DOMAIN}_{client.device_id}",
-            update_interval=(
-                timedelta(seconds=_FRIDGE_SCAN_INTERVAL)
-                if device_type == "冰箱"
-                else None
-            ),
+            update_interval=initial_interval,
         )
         # No first refresh has completed; HA's coordinator defaults this to True.
         self.last_update_success = False
@@ -91,6 +91,7 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     _LOGGER.warning("Hisense %s status read failed", self.device_type, exc_info=True)
                     status = None
                 if status:
+                    self._adjust_poll_interval(status)
                     return status
 
             if not self.client.username or not self.client.password:
@@ -103,6 +104,7 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     _LOGGER.warning("Hisense %s status retry failed", self.device_type, exc_info=True)
                     status = None
                 if status:
+                    self._adjust_poll_interval(status)
                     return status
 
             if attempt < _MAX_ATTEMPTS:
@@ -144,6 +146,68 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         finally:
             if self._refresh_task is asyncio.current_task():
                 self._refresh_task = None
+
+    def async_set_updated_data(self, data: dict[str, Any]) -> None:
+        """Update coordinator data and adjust dynamic polling interval."""
+        if isinstance(data, dict):
+            self._adjust_poll_interval(data)
+        super().async_set_updated_data(data)
+
+    def _adjust_poll_interval(self, status: dict[str, Any]) -> None:
+        """Dynamically adjust polling interval based on device state."""
+        if self.device_type in ("洗衣机", "干衣机"):
+            is_running = bool(status.get("is_running") or status.get("machine_state") == "running")
+            target_secs = _WASHER_RUNNING_INTERVAL if is_running else _WASHER_STANDBY_INTERVAL
+            new_interval = timedelta(seconds=target_secs)
+            if self.update_interval != new_interval:
+                self.update_interval = new_interval
+                _LOGGER.debug(
+                    "Adjusted %s (%s) polling interval to %ss (running=%s)",
+                    self.device_type,
+                    self.client.device_id,
+                    target_secs,
+                    is_running,
+                )
+        self._check_washer_completion(status)
+
+    def _check_washer_completion(self, status: dict[str, Any]) -> None:
+        """Trigger completion notification when washer finishes cycle."""
+        if self.device_type not in ("洗衣机", "干衣机"):
+            return
+        is_running = bool(status.get("is_running") or status.get("machine_state") == "running")
+        is_complete = (
+            status.get("machine_state") == "complete"
+            or status.get("run_status") == 7
+            or status.get("phase") == 7
+        )
+
+        if getattr(self, "_was_running", False) and is_complete:
+            self._was_running = False
+            dev_name = getattr(self.client, "device_name", self.device_type)
+            now_str = dt_util.now().strftime("%Y-%m-%d %H:%M:%S")
+            self.hass.bus.async_fire(
+                "hisense_washer_complete",
+                {
+                    "device_id": str(self.client.device_id),
+                    "device_name": dev_name,
+                    "status": "complete",
+                    "timestamp": now_str,
+                },
+            )
+            from homeassistant.components import persistent_notification
+
+            persistent_notification.async_create(
+                self.hass,
+                f"【{dev_name}】洗涤完成！\n时间：{now_str}",
+                title=f"海信智慧家 - {self.device_type}完成提醒",
+                notification_id=f"hisense_washer_complete_{self.client.device_id}",
+            )
+        elif is_running:
+            self._was_running = True
+        elif is_complete:
+            pass
+        else:
+            self._was_running = False
 
     def async_update_from_client(self) -> None:
         """Push optimistic control state, then read after the cloud settles."""
