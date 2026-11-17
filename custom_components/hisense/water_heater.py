@@ -1,7 +1,7 @@
 from homeassistant.components.water_heater import (
     WaterHeaterEntity,
     WaterHeaterEntityFeature,
-    STATE_OFF,  # <--- 新增引入
+    STATE_OFF,
 )
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.exceptions import HomeAssistantError
@@ -44,7 +44,6 @@ class HisenseWaterHeaterEntity(HisenseEntity, WaterHeaterEntity):
 
     @property
     def current_operation(self):
-        # ====== 核心修改：如果关机，必须返回 STATE_OFF ======
         if not self.status.get("power_on"):
             return STATE_OFF
             
@@ -52,11 +51,6 @@ class HisenseWaterHeaterEntity(HisenseEntity, WaterHeaterEntity):
         if mode is None:
             return None
         return MODES.get(mode, "未知")
-
-    # ====== 新增 is_on 属性，告诉前端到底开没开机 ======
-    @property
-    def is_on(self):
-        return self.status.get("power_on")
 
     async def async_set_temperature(self, **kwargs):
         if ATTR_TEMPERATURE in kwargs:

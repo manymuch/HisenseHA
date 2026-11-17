@@ -323,7 +323,6 @@ class HisenseWaterHeaterPowerSwitch(HisenseEntity, SwitchEntity):
         if await self.client.turn_on():
             self.coordinator.async_update_from_client()
         else:
-            from homeassistant.exceptions import HomeAssistantError
             raise HomeAssistantError("开机失败")
 
     async def async_turn_off(self, **kwargs):
@@ -331,5 +330,4 @@ class HisenseWaterHeaterPowerSwitch(HisenseEntity, SwitchEntity):
         if await self.client.turn_off():
             self.coordinator.async_update_from_client()
         else:
-            from homeassistant.exceptions import HomeAssistantError
             raise HomeAssistantError("关机失败")

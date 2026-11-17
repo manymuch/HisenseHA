@@ -58,7 +58,7 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 timedelta(seconds=_FRIDGE_SCAN_INTERVAL)
                 if device_type == "冰箱"
                 else timedelta(seconds=_WATER_HEATER_SCAN_INTERVAL)
-                if device_type == "热水器"   # <--- 新增热水器判断
+                if device_type == "热水器"
                 else None
             ),
         )

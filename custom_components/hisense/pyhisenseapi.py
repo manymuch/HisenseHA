@@ -304,7 +304,12 @@ def _device_type_from_name(device_type_name) -> str | None:
         return "洗衣机"
     if "dryer" in text or "干衣" in text or "烘干" in text:
         return "干衣机"
-    if "waterheater" in text or "water_heater" in text or "热水器" in text:
+    if (
+        "waterheater" in text
+        or "water_heater" in text
+        or "water heater" in text
+        or "热水器" in text
+    ):
         return "热水器"
     return None
 
@@ -1865,8 +1870,6 @@ class HiSenseWaterHeater(_HiSenseDevice):
                 if response.status == 200:
                     res_code = str(result.get("response", {}).get("resultCode", ""))
                     desc = str(result.get("response", {}).get("desc", ""))
-                    
-                    # 核心修改：放过 "0" 和 "4"
                     if res_code in ("0", "4") or not desc:
                         self._set_pending_status({"target_temperature": int(temperature)})
                         return True
@@ -1915,8 +1918,6 @@ class HiSenseWaterHeater(_HiSenseDevice):
                 if response.status == 200:
                     res_code = str(result.get("response", {}).get("resultCode", ""))
                     desc = str(result.get("response", {}).get("desc", ""))
-                    
-                    # 核心修改：放过 "0" 和 "4"
                     if res_code in ("0", "4") or not desc:
                         self._set_pending_status({"work_mode": int(mode_id)})
                         return True
