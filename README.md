@@ -39,6 +39,7 @@ Click the button above, or manually:
 1. Go to **Settings** → **Devices & services** → **Add integration**.
 2. Search for **Hisense Smart Devices** (or **Hisense**) and select it.
 3. Enter your **Hisense app username and password** (wrong credentials will show an authentication error).
+   > 💡 **Recommended (Anti-Collision / Zero Sniffing)**: To prevent session kicking between Home Assistant and your official mobile app on the MQTT push broker, we strongly recommend using a **shared family sub-account** for Home Assistant. See the step-by-step [Family Sub-Account Sharing Guide](docs/SUB_ACCOUNT_GUIDE.md).
 4. Choose the **home** that contains your device.
 5. Select one or more **devices**, then finish the wizard.
 

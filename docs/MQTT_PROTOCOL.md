@@ -120,6 +120,7 @@ To avoid MQTT broker session termination (mutual kicking) between Home Assistant
    - **Operation**: In the official "海信爱家" app, navigate to **我的 -> 家庭管理 -> 成员管理 -> 添加成员** (or 共享设备), and invite a family member or secondary phone number.
    - **Integration Setup**: Sign into the Home Assistant integration using the secondary account credentials.
    - **Advantage**: The mobile phone uses Account A (`customerId_A`, `device_A`), while Home Assistant uses Account B (`customerId_B`, `device_B`). Both have full access to household appliances, maintain independent MQTT client sessions, and **never collide**. **Requires zero network sniffing (0 抓包)**.
+   - 📖 **Detailed Guide / 详细教程**: See [Family Sub-Account Sharing Guide / 家庭副账号配置指引](SUB_ACCOUNT_GUIDE.md).
 2. **Path 2: Dedicated Sniffed Credentials (专属设备凭据 — 适合极客用户)**:
    - **Operation**: Users sniff their own device's `deviceId` and `loginPassword` once via tools like Charles, Reqable, or Proxyman, and enter them into Home Assistant's configuration options.
    - **Advantage**: Bypasses the shared fallback pool with 100% dedicated broker credentials.

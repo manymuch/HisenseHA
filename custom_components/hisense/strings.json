@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "HiSense Smart Device",
-        "description": "Login with App username and password",
+        "description": "Sign in with your Hisense AIHome username and password (recommended: use a shared family sub-account to prevent MQTT session collisions with the mobile app)",
         "data": {
           "username": "App login username, could be the phone number",
           "password": "App login password, if not available set it in the app first"
