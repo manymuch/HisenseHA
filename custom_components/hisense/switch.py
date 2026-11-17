@@ -307,7 +307,7 @@ class PromptSoundSwitch(HisenseEntity, SwitchEntity):
 class HisenseWaterHeaterPowerSwitch(HisenseEntity, SwitchEntity):
     """为热水器提供独立的电源开关实体。"""
 
-    _attr_translation_key = "water_heater_power"
+    _attr_name = "Power"
     _attr_icon = "mdi:power"
 
     def __init__(self, coordinator):

@@ -19,7 +19,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     )
 
 class HisenseWaterHeaterEntity(HisenseEntity, WaterHeaterEntity):
-    _attr_translation_key = "water_heater"
+    _attr_name = "Water Heater"
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_min_temp = 30.0
     _attr_max_temp = 75.0

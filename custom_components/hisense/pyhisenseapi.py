@@ -1871,7 +1871,7 @@ class HiSenseWaterHeater(_HiSenseDevice):
                         self._set_pending_status({"target_temperature": int(temperature)})
                         return True
                         
-                _LOGGER.warning("Hisense Water Heater set temp failed: %s", result)
+                _LOGGER.error("❌ 调温失败，云端返回: %s", result)
                 return False
         except Exception as e:
             _LOGGER.error("Hisense Water Heater set temp error: %s", e)
@@ -1921,7 +1921,7 @@ class HiSenseWaterHeater(_HiSenseDevice):
                         self._set_pending_status({"work_mode": int(mode_id)})
                         return True
                         
-                _LOGGER.warning("Hisense Water Heater set mode failed: %s", result)
+                _LOGGER.error("❌ 切模式失败，云端返回: %s", result)
                 return False
         except Exception as e:
             _LOGGER.error("Hisense Water Heater set mode error: %s", e)
