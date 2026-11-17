@@ -36,23 +36,40 @@ Hisense cloud APIs (`api-cn.hismarttv.com`) implement strict request throttling 
 ## 2. Broker Connection & Authentication / 连接与鉴权
 
 ### 2.1 Connection Endpoints / 服务器端点
-- **MQTT Broker Host**: `thsprojuk.aliyun-hbbj-hisense.pubsub.tech` (Alibaba Cloud IoT / EMAS)
+- **MQTT Broker Host**: `thsprojuk.aliyun-hbbj-hisense.pubsub.tech` (Baidu Intelligent Cloud IoT Core / 百度智能云物联网核心套件，前端挂载阿里云 NLB 负载均衡)
 - **Port**: `1883` (TCP) or `8883` (TLS / MQTTS)
 - **Protocol**: MQTT v3.1.1 / v5.0 (supports standard `paho-mqtt` client)
 - **Keepalive**: 60 seconds (`PINGREQ` / `PINGRESP`)
 
-### 2.2 Client Credentials / 认证凭据结构
-Hisense uses Alibaba Cloud IoT Device authentication:
-- **Client ID**: Mobile client device ID (format: `aiotfffe<mac_or_uuid>`).
-  > **Important**: MQTT brokers strictly enforce client ID uniqueness. If two clients connect using the identical Client ID simultaneously, the broker disconnects the previous connection. Ensure each client instance uses a unique ID.
-- **Username**:
+### 2.2 Client Credentials & Protocol Anatomy / 认证凭据结构与 ThingIDP 协议规范
+Hisense smart home services utilize the **Baidu Intelligent Cloud IoT Core (百度智能云物联网套件) `thingidp` device identity protocol**:
+- **Client ID**: Mobile client device ID (format: `aiotfffe<32_hex_chars>`).
+  > **Important (Broker Anti-Collision Rule / 防互踢机制)**: MQTT brokers strictly enforce client ID uniqueness per broker instance. If two client instances connect using the identical Client ID simultaneously, the broker will drop the older connection immediately. Each independent client instance must utilize a distinct ID.
+- **Username Template**:
   ```text
-  thingidp@thsprojuk|<client_device_id>|0|MD5
+  {adp_type}@{IoTCoreId}|{DeviceKey}|{timestamp}|{algorithm_type}
   ```
-- **Password**: Cloud-issued MD5 token corresponding to the client device ID.
+  - `adp_type`: Fixed as `thingidp`.
+  - `IoTCoreId`: The Hisense cloud IoT project suite ID: `thsprojuk`.
+  - `DeviceKey`: Client Device Key (identical to Client ID: `aiotfffe<32_hex_chars>`).
+  - `timestamp`: Timestamp in seconds (or fixed placeholder `0`).
+  - `algorithm_type`: Hashing algorithm, fixed as `MD5`.
+  - **Constructed Username**:
+    ```text
+    thingidp@thsprojuk|aiotfffe<32_HEX_CLIENT_DEVICE_ID>|0|MD5
+    ```
+- **Password Calculation Formula (MD5 Method)**:
+  ```text
+  password = MD5(f"{DeviceKey}&{timestamp}&{algorithm_type}{DeviceSecret}")
+  ```
+  For Hisense:
+  ```text
+  password = MD5(f"{DeviceKey}&0&MD5{DeviceSecret}").lower()
+  ```
+  *(Where `DeviceSecret` is the pre-registered secret issued by the IoT Core for this client device).*
 
 ### 2.3 Dynamic Configuration Endpoint / 云端动态配置接口
-The app periodically fetches broker credentials and registers device online status:
+When the official mobile app starts, it issues an HTTP request to the push gateway to fetch broker credentials:
 - **URL**: `POST https://mqtt-msg.hismarttv.com/2.0/mqtt/config`
 - **Headers**:
   ```http
@@ -95,21 +112,39 @@ The app periodically fetches broker credentials and registers device online stat
   }
   ```
 
+### 2.4 Multi-Client Isolation & Anti-Collision Strategies / 多客户端会话隔离与防互踢策略
+
+To avoid MQTT broker session termination (mutual kicking) between Home Assistant and the official mobile app, the following three integration strategies are available:
+
+1. **Path 1: Sub-Account Sharing (家庭子账号隔离机制 — 推荐普通用户，0 抓包)**:
+   - **Operation**: In the official "海信爱家" app, navigate to **我的 -> 家庭管理 -> 成员管理 -> 添加成员** (or 共享设备), and invite a family member or secondary phone number.
+   - **Integration Setup**: Sign into the Home Assistant integration using the secondary account credentials.
+   - **Advantage**: The mobile phone uses Account A (`customerId_A`, `device_A`), while Home Assistant uses Account B (`customerId_B`, `device_B`). Both have full access to household appliances, maintain independent MQTT client sessions, and **never collide**. **Requires zero network sniffing (0 抓包)**.
+2. **Path 2: Dedicated Sniffed Credentials (专属设备凭据 — 适合极客用户)**:
+   - **Operation**: Users sniff their own device's `deviceId` and `loginPassword` once via tools like Charles, Reqable, or Proxyman, and enter them into Home Assistant's configuration options.
+   - **Advantage**: Bypasses the shared fallback pool with 100% dedicated broker credentials.
+3. **Path 3: Gateway Dynamic Client Registration (动态网关注册逆向探索 — 正在推进中)**:
+   - Technical research is underway to extract the signing secret for `appKey: "JHKAIHOME"` on `mqtt-msg.hismarttv.com` to dynamically register virtual device keys per HA instance automatically.
+
 ---
 
 ## 3. Topic Subscription Matrix / 主题订阅规范
 
-To ensure zero dropped messages across multiple device categories, integrations should subscribe to the following hierarchy:
+To ensure zero dropped messages across multiple device categories, integrations **must subscribe to the full user wildcard topic** (`$iot/general/user/{customerId}/#`):
 
 | Topic Pattern | Description | 说明 |
 | :--- | :--- | :--- |
-| `$iot/general/user/{customerId}/#` | All downlink push messages for the user account | 用户全量下行总线通道（跨家庭、跨设备） |
-| `$iot/general/user/{customerId}/down/JHKAIHOME/#` | Downlink push messages for AIHome app | 爱家 App 专属业务下行通道 |
-| `$iot/{clientDeviceId}/#` | Messages routed to this client session | 当前客户端专属通道 |
+| `$iot/general/user/{customerId}/#` | **Mandatory** All downlink push messages for this user account across all apps and channels | **核心总线通道（必选）**：跨通道、跨品类接收全量推送 |
+| `$iot/general/user/{customerId}/down/1123840823/8001008` | Appliance cycle complete push notifications (Washer complete, etc.) | 家电设备洗涤/烘干完成等核心业务推送 |
+| `$iot/general/user/{customerId}/down/JHKAIHOME/#` | AIHome mobile app dedicated downlink channel | 爱家 App 专属业务下行通道 |
+| `$iot/{clientDeviceId}/#` | Messages routed to this specific client session | 当前客户端专属通道 |
 | `$iot/{applianceWifiId}/#` | Messages referencing physical appliance's WiFi ID | 物理设备 WiFi MAC/ID 专属推送通道 |
 | `$iot/{applianceDeviceId}/#` | Messages referencing appliance Device ID | 物理设备 Device ID 专属推送通道 |
 | `$iot/#` | Broker-level wildcard for all authorized IoT downlink messages | 云端所有已鉴权下行消息通配 |
 | `#` | Global wildcard (supported by broker) | 全局通配符（Broker 确认支持） |
+
+> ⚠️ **Critical Discovery / 避坑指南**:
+> The official cloud pushes laundry completion notifications through channel **`1123840823`** (under tag `8001008`), **NOT** through `JHKAIHOME`! If an integration only subscribes to `$iot/.../down/JHKAIHOME/#`, cycle completion messages will be **completely missed**! Subscribing to `$iot/general/user/{customerId}/#` guarantees 100% message reception.
 
 ---
 
@@ -191,6 +226,33 @@ Sent upon significant program transitions or initial status broadcast:
 ```
 *Handling*: When payload contains an event trigger without a full state dictionary, schedule a single on-demand cloud refresh (`coord.async_start_refresh()`).
 
+#### Pattern D: Cycle Completion & Notification Push (`msgContent`) / 洗涤完成与业务事件通知
+Sent when a major lifecycle event completes (such as washing machine cycle complete):
+```json
+{
+  "businessTag": "8001008",
+  "channelApp": "1123840823",
+  "dispatchAction": "0",
+  "identifier": "msg",
+  "messageId": "9cbb8780-e265-11f1-b844-3151eb0d2207_8001008_<CUSTOMER_ID>",
+  "messageGeneratedTimeStamp": 1794737032585,
+  "msgType": 2000,
+  "msgTitle": "设备通知",
+  "msgContent": "洗衣机已洗衣完毕，快去处理吧",
+  "msgUsage": "userTask",
+  "msgVersion": 1,
+  "operationType": 28677,
+  "pushType": 2,
+  "targetCustomerId": "<CUSTOMER_ID>",
+  "targetDeviceId": "aiotfffe<32_HEX_CLIENT_DEVICE_ID>",
+  "text": "{\"msgContent\":\"洗衣机已洗衣完毕，快去处理吧\",\"msgTitle\":\"设备通知\",\"msgType\":2000}"
+}
+```
+*Zero-Latency Handling*:
+1. Display the human-readable notification text (`msgContent`) immediately on the entity's latest push sensor (`sensor.*_latest_push`).
+2. When `businessTag == "8001008"` or `msgContent` indicates completion, immediately perform in-memory state transition (`run_status = 7` (complete), `remain_time = 0`, `start_pause_status = False`) without querying the cloud HTTP API!
+3. Fire the `hisense_washer_complete` event on the Home Assistant event bus and issue a persistent notification.
+
 ---
 
 ## 5. Device Attribute Mapping Reference / 设备字段速查与对接指南
@@ -210,6 +272,10 @@ Sent upon significant program transitions or initial status broadcast:
 | `dryingModes` | int | `1`: Low-temperature softbaking (低温烘), `0`: Standard | 低温烘干开关 |
 | `doorLockStatus` | string/int | `"1"`: Locked, `"0"`: Unlocked | 门锁物理状态 |
 | `childLock` | string/int | `"1"`: Locked, `"0"`: Unlocked (Only settable when machine is running) | 童锁状态 |
+| `detergentLackStatus` | string/int | `"0"`: Normal (充足), `"1"`: Empty/Lack (洗涤剂不足告警) | 洗涤剂耗材余量告警 |
+| `softenLackStatus` | string/int | `"0"`: Normal (充足), `"1"`: Empty/Lack (柔顺剂不足告警) | 柔顺剂耗材余量告警 |
+| `detergentMode` | int | Auto dispenser dosage level (`0`: Off, `1`: Normal, `2`: More, `3`: Less) | 洗涤剂自动投放挡位 |
+| `softenMode` | int | Auto softener dosage level (`0`: Off, `1`: Normal, `2`: More, `3`: Less) | 柔顺剂自动投放挡位 |
 
 ### 5.2 Air Conditioners / 空调
 | Field | Type | Values & Meanings | 说明 |
