@@ -324,9 +324,15 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
                         if snapshot:
                             summary_str = " | ".join(snapshot)
 
+                    msg_content = None
+                    if isinstance(parsed_text, dict):
+                        msg_content = parsed_text.get("msgContent") or parsed_text.get("msgTitle")
+
                     status_val = message_data.get("status") if isinstance(message_data, dict) else None
                     if not summary_str:
-                        if status_val in ("complete", "7"):
+                        if msg_content:
+                            summary_str = msg_content
+                        elif status_val in ("complete", "7"):
                             summary_str = "洗衣完成 (complete)"
                         elif status_val in ("running", "1"):
                             summary_str = "开始运行 (running)"
@@ -370,20 +376,38 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
                         r_curr = r_val[0] if isinstance(r_val, list) else r_val
                         if str(r_curr) == "7":
                             is_complete = True
+                    elif msg_content and any(w in msg_content for w in ("洗衣完毕", "洗涤完成", "烘干完成", "已完成洗衣")):
+                        is_complete = True
+                    elif str(tag_val) == "8001008":
+                        is_complete = True
+
+                    if is_complete and coord.device_type == "洗衣机":
+                        if hasattr(coord.client, "status") and isinstance(coord.client.status, dict):
+                            coord.client.status.update({
+                                "run_status": 7,
+                                "machine_state": "complete",
+                                "cycle_phase": "complete",
+                                "is_running": False,
+                                "remain_time": 0,
+                                "start_pause_status": False,
+                            })
+                            coord.async_set_updated_data(coord.client.get_status())
 
                     if is_complete:
+                        content_desc = msg_content or f"【{dev_name}】已完成洗衣！"
                         hass.bus.async_fire(
                             "hisense_washer_complete",
                             {
                                 "device_id": str(dev_id),
                                 "device_name": dev_name,
                                 "status": "complete",
+                                "message": content_desc,
                                 "timestamp": now_str,
                             },
                         )
                         persistent_notification.async_create(
                             hass,
-                            f"收到海信洗衣机推送：【{dev_name}】已完成洗衣！\n推送时间：{now_str}",
+                            f"收到海信洗衣机推送：{content_desc}\n推送时间：{now_str}",
                             title="海信智慧家 - 洗衣完成提醒",
                             notification_id=f"hisense_washer_complete_{dev_id}",
                         )
