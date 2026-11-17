@@ -395,12 +395,21 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
                     if raw_states is None and (not is_simulated or refresh_cloud):
                         coord.async_start_refresh()
 
+        extra_topics = []
+        for dev_id, _ in coordinators:
+            extra_topics.append(f"$iot/{dev_id}/#")
+            if ":" in str(dev_id):
+                for part in str(dev_id).split(":"):
+                    if part:
+                        extra_topics.append(f"$iot/{part}/#")
+
         mqtt_manager = HisenseMQTTManager(
             session=session,
             access_token=active_token,
             customer_id=active_customer_id,
             on_message_callback=on_mqtt_device_change,
             loop=hass.loop,
+            extra_topics=extra_topics,
         )
         hass.data[DOMAIN][f"{entry.entry_id}_mqtt"] = mqtt_manager
 

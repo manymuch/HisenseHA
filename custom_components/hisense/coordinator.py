@@ -22,10 +22,7 @@ _MAX_ATTEMPTS = 3
 
 #: 冰箱定时轮询间隔（秒）。
 _FRIDGE_SCAN_INTERVAL = 60
-#: 洗衣机/干衣机待机轮询间隔（秒）：在用户物理面板按键开机或启动时，最长等待此间隔即可自动检测到状态并更新
-_WASHER_STANDBY_INTERVAL = 30
-#: 洗衣机/干衣机运行中轮询间隔（秒）：运转时自适应加速，精准追踪阶段、剩余时间与电机转速
-_WASHER_RUNNING_INTERVAL = 15
+#: 洗衣机/干衣机/空调遵循纯事件驱动（不主动轮询，防止频繁请求导致封号），完全依赖 MQTT 实时推送与操作回读。
 
 
 
@@ -50,11 +47,11 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.push_history: list[dict[str, Any]] = []
         self._was_running = False
 
-        initial_interval = None
-        if device_type == "冰箱":
-            initial_interval = timedelta(seconds=_FRIDGE_SCAN_INTERVAL)
-        elif device_type in ("洗衣机", "干衣机"):
-            initial_interval = timedelta(seconds=_WASHER_STANDBY_INTERVAL)
+        initial_interval = (
+            timedelta(seconds=_FRIDGE_SCAN_INTERVAL)
+            if device_type == "冰箱"
+            else None
+        )
 
         super().__init__(
             hass,
@@ -154,20 +151,7 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         super().async_set_updated_data(data)
 
     def _adjust_poll_interval(self, status: dict[str, Any]) -> None:
-        """Dynamically adjust polling interval based on device state."""
-        if self.device_type in ("洗衣机", "干衣机"):
-            is_running = bool(status.get("is_running") or status.get("machine_state") == "running")
-            target_secs = _WASHER_RUNNING_INTERVAL if is_running else _WASHER_STANDBY_INTERVAL
-            new_interval = timedelta(seconds=target_secs)
-            if self.update_interval != new_interval:
-                self.update_interval = new_interval
-                _LOGGER.debug(
-                    "Adjusted %s (%s) polling interval to %ss (running=%s)",
-                    self.device_type,
-                    self.client.device_id,
-                    target_secs,
-                    is_running,
-                )
+        """Process status updates and check washer completion without polling."""
         self._check_washer_completion(status)
 
     def _check_washer_completion(self, status: dict[str, Any]) -> None:

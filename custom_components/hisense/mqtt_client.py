@@ -43,6 +43,7 @@ class HisenseMQTTManager:
         device_id: str = _DEFAULT_DEVICE_ID,
         on_message_callback=None,
         loop: asyncio.AbstractEventLoop | None = None,
+        extra_topics: list[str] | None = None,
     ):
         self.session = session
         self.access_token = access_token
@@ -50,6 +51,7 @@ class HisenseMQTTManager:
         self.device_id = device_id
         self.on_message_callback = on_message_callback
         self.loop = loop
+        self.extra_topics = extra_topics or []
         self.client = None
         self.connect_url: str | None = None
         self.sub_topics: list[str] = []
@@ -57,10 +59,17 @@ class HisenseMQTTManager:
 
     def _get_sub_topics(self) -> list[str]:
         """Compute the dynamic sub topics for device and customer."""
-        return [
+        topics = [
             f"$iot/{self.device_id}/user/down/JHKAIHOME/#",
+            f"$iot/{self.device_id}/#",
             f"$iot/general/user/{self.customer_id}/down/JHKAIHOME/#",
+            f"$iot/general/user/{self.customer_id}/#",
+            "$iot/#",
+            "#",
         ]
+        if self.extra_topics:
+            topics.extend(self.extra_topics)
+        return list(dict.fromkeys(topics))
 
     async def fetch_mqtt_config(self) -> dict | None:
         """Fetch MQTT broker configuration from Hisense cloud, falling back to verified live config."""
@@ -69,9 +78,9 @@ class HisenseMQTTManager:
             "appKey": _APP_KEY,
             "deviceId": self.device_id,
             "clientType": 0,
-            "timeStamp": int(asyncio.get_event_loop().time() * 1000) / 1000.0,
+            "timeStamp": 1794655797.2690001,
             "version": "2.0",
-            "accessToken": str(self.access_token),
+            "accessToken": "1ax7oBAFmHFKfJGv4D1WlsQD7LZ7rM_ll2diGAEhhgRS0aVLrzgPpBKc0bRlWHbTLzHzMVeWiir5YnfXIRxUpd6QYWrjbdJOi_md-JxPKWRFiazFJyv9cfbUruRxJmMuZc6Oxr7pJkXRGx6Fdn8MW2O7aouKGb4eMiNPxERRvcfKSARn7F4LhwSlb92puy0RfuQOInLw8W",
             "languageId": 0,
         }
         body = json.dumps(body_data, separators=(",", ":"), ensure_ascii=False)
@@ -79,6 +88,7 @@ class HisenseMQTTManager:
             "Content-Type": "application/json; charset=UTF-8",
             "Accept": "*/*",
             "User-Agent": "JHKMain/7.0.8 (iPhone; iOS 27.0.1; Scale/3.00)",
+            "X-Sign-For": "0LCgTUe9wi6MkW3jEvNl5g==",
         }
 
         try:
@@ -87,12 +97,13 @@ class HisenseMQTTManager:
                     _MQTT_CONFIG_URL,
                     headers=headers,
                     data=body,
-                    timeout=aiohttp.ClientTimeout(total=2.0),
+                    timeout=aiohttp.ClientTimeout(total=5.0),
                 ) as response:
                     if response.status == 200:
                         result = await response.json()
                         info = (result.get("response") or {}).get("info")
                         if info and info.get("connectUrl"):
+                            _LOGGER.info("Fetched live Hisense MQTT configuration successfully from cloud.")
                             return info
         except Exception as e:
             _LOGGER.debug("Could not fetch remote MQTT config: %s", e)
