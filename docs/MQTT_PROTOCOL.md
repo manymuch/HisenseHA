@@ -65,11 +65,11 @@ The app periodically fetches broker credentials and registers device online stat
   {
     "format": 1,
     "appKey": "JHKAIHOME",
-    "deviceId": "aiotfffe64f68575912f748de67f8280d1d4cd13",
+    "deviceId": "aiotfffe<32_HEX_CLIENT_DEVICE_ID>",
     "clientType": 0,
     "timeStamp": 1794655797.269,
     "version": "2.0",
-    "accessToken": "<your_user_access_token>",
+    "accessToken": "<YOUR_ACCESS_TOKEN>",
     "languageId": 0
   }
   ```
@@ -86,8 +86,8 @@ The app periodically fetches broker credentials and registers device online stat
         "pubTopicIm": "$iot/deviceId/user/up/9/JHKAIHOME/3/1601002",
         "deviceIdSubTopic": "$iot/deviceId/user/down/JHKAIHOME/#",
         "userSubTopic": "$iot/general/user/customerId/down/JHKAIHOME/#",
-        "loginUserName": "thingidp@thsprojuk|aiotfffe64f68575912f748de67f8280d1d4cd13|0|MD5",
-        "loginPassword": "c19336c55cbcb30a64c5241240fd7749",
+        "loginUserName": "thingidp@thsprojuk|aiotfffe<32_HEX_CLIENT_DEVICE_ID>|0|MD5",
+        "loginPassword": "<MD5_PASSWORD_HASH>",
         "logReportTags": ["2001005"]
       },
       "status": "SUCCESS"
@@ -124,13 +124,13 @@ All Hisense MQTT messages arrive as a JSON envelope containing metadata and an i
   "channelApp": "JHKAIHOME",
   "dispatchAction": "0",
   "identifier": "msg",
-  "messageId": "06dc3a60-e0b3-11f1-8b2f-ff7d8f12241a_91222600_28172956",
+  "messageId": "06dc3a60-e0b3-11f1-8b2f-ff7d8f12241a_91222600_<CUSTOMER_ID>",
   "messageGeneratedTimeStamp": 1794719494821,
   "msgUsage": "subscribeReminder",
   "msgVersion": 1,
   "pushType": 2,
-  "targetCustomerId": "28172956",
-  "targetDeviceId": "aiotfffe64f68575912f748de67f8280d1d4cd13",
+  "targetCustomerId": "<CUSTOMER_ID>",
+  "targetDeviceId": "aiotfffe<32_HEX_CLIENT_DEVICE_ID>",
   "text": "{\"action\":\"onDeviceStateUpdate\", ...}",
   "signatureServer": "..."
 }
@@ -143,7 +143,7 @@ Sent when specific attributes change (e.g. power toggled, speed adjusted):
 ```json
 {
   "action": "onDeviceStateUpdate",
-  "devId": "1wfx1200080d017b1pe0124",
+  "devId": "<APPLIANCE_DEVICE_ID>",
   "changeInfo": {
     "powerStatus": [1, 0],
     "runStatus": [4, 2],
@@ -159,7 +159,7 @@ Sent upon significant program transitions or initial status broadcast:
 ```json
 {
   "action": "onDeviceStateUpdate",
-  "devId": "1wfx1200080d017b1pe0124",
+  "devId": "<APPLIANCE_DEVICE_ID>",
   "status": {
     "powerStatus": "1",
     "runStatus": "4",

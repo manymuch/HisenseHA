@@ -47,6 +47,18 @@ WASHER_BINARY_SENSOR_DESCRIPTIONS = (
         translation_key="washer_child_lock",
         icon="mdi:account-lock",
     ),
+    BinarySensorEntityDescription(
+        key="detergent_lack",
+        translation_key="washer_detergent_lack",
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        icon="mdi:cup-water",
+    ),
+    BinarySensorEntityDescription(
+        key="softener_lack",
+        translation_key="washer_softener_lack",
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        icon="mdi:bottle-tonic",
+    ),
 )
 
 DRYER_BINARY_SENSOR_DESCRIPTIONS = (
@@ -313,7 +325,12 @@ class HisenseWasherBinarySensor(HisenseEntity, BinarySensorEntity):
 
     @property
     def is_on(self):
-        return self.status.get(self.entity_description.key)
+        val = self.status.get(self.entity_description.key)
+        if self.entity_description.key in ("detergent_lack", "softener_lack"):
+            if val is None:
+                return False
+            return str(val) in ("1", "true", "True")
+        return bool(val)
 
 
 class HisenseDryerBinarySensor(HisenseEntity, BinarySensorEntity):

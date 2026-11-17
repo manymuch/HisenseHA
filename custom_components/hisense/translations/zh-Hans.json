@@ -385,6 +385,12 @@
       "washer_child_lock": {
         "name": "童锁"
       },
+      "washer_detergent_lack": {
+        "name": "洗涤剂不足"
+      },
+      "washer_softener_lack": {
+        "name": "柔顺剂不足"
+      },
       "washer_softbaking": {
         "name": "低温烘"
       },

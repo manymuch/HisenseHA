@@ -1271,7 +1271,13 @@ class HiSenseWasher(_HiSenseDevice):
             "child_lock": _flag("childLock"),
             "detergent_mode": states.get("detergentMode"),
             "soften_mode": states.get("softenMode"),
-            "detergent_lack": _as_int(states.get("detergentLackStatus")),
+            "detergent_lack": _as_int(states.get("detergentLackStatus") or states.get("detergentLack")),
+            "softener_lack": _as_int(
+                states.get("softenLackStatus")
+                or states.get("softenerLackStatus")
+                or states.get("softenLack")
+                or states.get("softenerLack")
+            ),
             "water_consumption": states.get("waterConsumption"),
             "power_consumption": states.get("powerConsumption"),
             "start_pause_status": _flag("startPauseStatus"),

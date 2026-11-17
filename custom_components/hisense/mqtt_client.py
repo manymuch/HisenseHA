@@ -80,7 +80,7 @@ class HisenseMQTTManager:
             "clientType": 0,
             "timeStamp": 1794655797.2690001,
             "version": "2.0",
-            "accessToken": "1ax7oBAFmHFKfJGv4D1WlsQD7LZ7rM_ll2diGAEhhgRS0aVLrzgPpBKc0bRlWHbTLzHzMVeWiir5YnfXIRxUpd6QYWrjbdJOi_md-JxPKWRFiazFJyv9cfbUruRxJmMuZc6Oxr7pJkXRGx6Fdn8MW2O7aouKGb4eMiNPxERRvcfKSARn7F4LhwSlb92puy0RfuQOInLw8W",
+            "accessToken": self.access_token or "",
             "languageId": 0,
         }
         body = json.dumps(body_data, separators=(",", ":"), ensure_ascii=False)

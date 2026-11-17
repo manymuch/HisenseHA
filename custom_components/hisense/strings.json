@@ -373,6 +373,12 @@
       "washer_child_lock": {
         "name": "Child lock"
       },
+      "washer_detergent_lack": {
+        "name": "Detergent Empty"
+      },
+      "washer_softener_lack": {
+        "name": "Softener Empty"
+      },
       "dryer_power": {
         "name": "Power"
       },
