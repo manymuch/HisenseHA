@@ -50,6 +50,8 @@ This integration communicates with the **Hisense AIHome cloud** and features bui
    - Any incoming device push triggers the `hisense_mqtt_message` event.
 2. **On-demand Refresh**: Device state is also updated after entity actions or when pressing the **Force refresh** diagnostic button.
 
+> 💡 **Developer Reference**: For in-depth technical specifications of the Hisense cloud MQTT broker, authentication mechanisms, topic hierarchies, and payload schemas across appliances (Washer, Dryer, AC, Refrigerator, Dishwasher, Oven), please see the [Hisense Cloud MQTT Push Protocol & Integration Guide](docs/MQTT_PROTOCOL.md).
+
 ## Features
 
 - **Air Conditioner**: Power, HVAC modes (cool/heat/fan/dry), target temperature, fan speed.
