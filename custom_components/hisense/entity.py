@@ -78,6 +78,9 @@ class HisenseEntity(CoordinatorEntity[HisenseDataUpdateCoordinator]):
         elif device_type == "干衣机":
             translation_key = "hisense_dryer"
             name = device_name if device_name else "Hisense Dryer"
+        elif device_type == "热水器":
+            translation_key = "hisense_water_heater"
+            name = device_name if device_name else "Hisense Water Heater"
         else:
             translation_key = "hisense_ac"
             name = device_name if device_name else "Hisense AC"
