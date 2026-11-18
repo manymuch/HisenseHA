@@ -1,96 +1,134 @@
-# Hisense Cloud MQTT Push Protocol & Integration Guide
 # 海信云端 MQTT 实时推送协议与多设备对接指南
 
-This document provides a comprehensive technical reference for the MQTT push protocol used by the Hisense AIHome cloud (海信爱家). It is intended to help developers integrate additional Hisense devices (Air Conditioners, Refrigerators, Dishwashers, Ovens, TV, etc.) into Home Assistant without relying on periodic polling.
-
-本文档详细记录了海信爱家（Hisense AIHome）云端 MQTT 实时推送协议的技术实现细节与报文规范，旨在为社区开发者提供参考，帮助大家无缝对接海信全品类智能设备（空调、冰箱、洗碗机、蒸烤箱、电视等），实现零轮询、防封号的纯实时推送集成。
+本文档详细记录了海信爱家（Hisense AIHome）云端 MQTT 实时推送协议的技术实现细节、底层报文规范与架构机制。旨在为社区开发者与进阶用户提供权威参考，帮助大家无缝对接海信全品类智能设备（洗衣机、干衣机、空调、冰箱、洗碗机、蒸烤箱、电视等），构建零轮询、零封号、低延迟的稳定智能家居体系。
 
 ---
 
-## 1. Architecture Overview / 架构概述
+## 一、架构设计与核心原则
 
-### Why MQTT Push (Zero-Polling)? / 为什么必须使用 MQTT 推送（零轮询架构）？
-Hisense cloud APIs (`api-cn.hismarttv.com`) implement strict request throttling and anti-abuse policies. Repeated periodic HTTP polling (e.g. every 15–30 seconds) can trigger cloud account suspensions or IP bans. The official mobile app (海信爱家) relies on a persistent MQTT connection for instant status updates. By replicating this MQTT long connection, Home Assistant achieves instant status updates and cycle notifications with **zero background polling**.
+### 1.1 为什么必须采用 MQTT 推送（拒绝无脑轮询）？
+海信云端开放接口（`api-cn.hismarttv.com` 等）部署了极其严苛的 WAF 防刷策略与风控限制。若在 Home Assistant 中采用传统的高频定时轮询（例如每 15~30 秒发起一次 HTTP 请求），每天将产生数千次访问，极易触发云端风控，导致**账号封禁或 IP 封锁**。
 
-海信云端 API 具有严格的请求频次限制与风控策略。周期性定时轮询（如 15~30 秒一次）极易触发云端封号或限制访问。官方“海信爱家”App 在手机前台运行时，完全依托 MQTT 长连接通道接收设备状态推送。通过在 Home Assistant 中复现这一 MQTT 长连接，不仅能做到设备开机、关机、运行阶段突变时秒级感知，还彻底消除了主动轮询导致的封号风险。
+官方手机「海信爱家」App 在运行与后台常驻时，核心依赖 MQTT 长连接推送通道接收状态变化。在 Home Assistant 中复现这套 MQTT 通道，能够实现：
+- **瞬时感知**：设备状态变化与洗涤结束秒级通知；
+- **零请求风控**：待机与关机状态下 0 次主动查询，从源头杜绝封号。
 
 ```
 +---------------------------+        +-----------------------------------+
-|  Hisense Appliance        |        |  Hisense Cloud Services           |
-|  (Washer / AC / Fridge)   |        |  (IoT / AIHome Backend)           |
+|     海信智能家电设备      |        |        海信官方云端服务           |
+|  (洗衣机 / 空调 / 冰箱)   |        |   (IoT 物联网后台 / 业务中心)     |
 +-------------+-------------+        +-----------------+-----------------+
               |                                        |
-              | Device status report via WiFi           |
+              | 设备状态上报 (WiFi / 专有通道)          |
               +--------------------------------------->+
                                                        |
-                                                       | Forward state update
+                                                       | 转发关键业务与状态推送
                                                        v
 +---------------------------+        +-----------------+-----------------+
-|  Home Assistant           |<-------+  Alibaba Cloud IoT MQTT Broker    |
-|  (HisenseHA Integration)  |  MQTT  |  (thsprojuk.aliyun...:1883)       |
-+---------------------------+  Push  +-----------------------------------+
+|      Home Assistant       |<-------+    百度智能云 / 阿里 IoT MQTT     |
+|   (HisenseHA 自定义集成)  |  MQTT  |  (thsprojuk.aliyun...:1883)       |
++---------------------------+  推送  +-----------------------------------+
 ```
 
 ---
 
-## 2. Broker Connection & Authentication / 连接与鉴权
+## 二、官方 App 状态同步真相与拟真机制
 
-### 2.1 Connection Endpoints / 服务器端点
-- **MQTT Broker Host**: `thsprojuk.aliyun-hbbj-hisense.pubsub.tech` (Baidu Intelligent Cloud IoT Core / 百度智能云物联网核心套件，前端挂载阿里云 NLB 负载均衡)
-- **Port**: `1883` (TCP) or `8883` (TLS / MQTTS)
-- **Protocol**: MQTT v3.1.1 / v5.0 (supports standard `paho-mqtt` client)
-- **Keepalive**: 60 seconds (`PINGREQ` / `PINGRESP`)
+通过对海信官方爱家 App 核心动态库（`libapp.so`）进行深度逆向分析，我们发现了海信在智能家电状态同步上的真实底层逻辑：
 
-### 2.2 Client Credentials & Protocol Anatomy / 认证凭据结构与 ThingIDP 协议规范
-Hisense smart home services utilize the **Baidu Intelligent Cloud IoT Core (百度智能云物联网套件) `thingidp` device identity protocol**:
-- **Client ID**: Mobile client device ID (format: `aiotfffe<32_hex_chars>`).
-  > **Important (Broker Anti-Collision Rule / 防互踢机制)**: MQTT brokers strictly enforce client ID uniqueness per broker instance. If two client instances connect using the identical Client ID simultaneously, the broker will drop the older connection immediately. Each independent client instance must utilize a distinct ID.
-- **Username Template**:
-  ```text
-  {adp_type}@{IoTCoreId}|{DeviceKey}|{timestamp}|{algorithm_type}
-  ```
-  - `adp_type`: Fixed as `thingidp`.
-  - `IoTCoreId`: The Hisense cloud IoT project suite ID: `thsprojuk`.
-  - `DeviceKey`: Client Device Key (identical to Client ID: `aiotfffe<32_hex_chars>`).
-  - `timestamp`: Timestamp in seconds (or fixed placeholder `0`).
-  - `algorithm_type`: Hashing algorithm, fixed as `MD5`.
-  - **Constructed Username**:
-    ```text
-    thingidp@thsprojuk|aiotfffe<32_HEX_CLIENT_DEVICE_ID>|0|MD5
-    ```
-- **Password Calculation Formula (MD5 Method)**:
-  ```text
-  password = MD5(f"{DeviceKey}&{timestamp}&{algorithm_type}{DeviceSecret}")
-  ```
-  For Hisense:
-  ```text
-  password = MD5(f"{DeviceKey}&0&MD5{DeviceSecret}").lower()
-  ```
-  *(Where `DeviceSecret` is the pre-registered secret issued by the IoT Core for this client device).*
+### 2.1 为什么开机与运转中没有 MQTT 推送？
+1. **遥测数据流与通知消息严格分离**：
+   洗衣机等大型家电在运转中，其转速、水温、倒计时每秒都在变化。洗衣机通过底层专用通道向海信云端上报高频报文，但海信云端**绝不会把每一秒的遥测数据转发到用户的手机 MQTT 通道（`$iot/general/user/{customerId}/#`）**，否则会产生巨大的服务器推流带宽开销并消耗手机电量。
+2. **官方 App 洗衣机卡片机制**：
+   在官方 App 源码中，空调模块实现了 `JhkMqttConsumer`（接收温湿度推流），但洗衣机模块（`LargeDevCardMultiWasherVM`）**并未实现 MQTT 状态消费者**。
+   官方 App 的真实做法是：
+   - 用户打开 App 卡片时，通过 HTTP 接口查询一次当前状态；
+   - 若检测到正在运转，App 本地启动 **`_startTimeUpdateMode`** 计时器，由手机自己在本地进行分钟平滑倒计时，而非依赖云端持续推流；
+   - 洗涤结束时，由云端下发离散通知推送触发 `_stopTimerUpdateMode` 停止计时。
+3. **MQTT 推送涵盖的业务范围**：
+   海信云端仅在以下几个离散关键节点向用户下发推送：
+   - **洗涤完成**：`businessTag: 8001008`，携带 `"msgContent": "洗衣机已洗衣完毕，快去处理吧"`；
+   - **耗材告警**：柔顺剂不足、洗涤剂不足；
+   - **异常报警**：门未关严、进水超时、排水异常；
+   - **定期保养**：筒自洁保养提醒。
 
-### 2.3 Dynamic Configuration Endpoint / 云端动态配置接口
-When the official mobile app starts, it issues an HTTP request to the push gateway to fetch broker credentials:
-- **URL**: `POST https://mqtt-msg.hismarttv.com/2.0/mqtt/config`
-- **Headers**:
+### 2.2 Home Assistant 拟真还原架构设计
+基于上述机制，Home Assistant 实现了与官方 App 完全拟真的三层运行策略：
+
+1. **关机与待机状态（严格零轮询）**：
+   `update_interval = None`。设备关机或待机时，完全不向云端发起任何定时轮询（0 次请求），永远杜绝封号。
+2. **洗涤运转状态（本地虚拟分钟倒计时）**：
+   检测到洗衣机开机运转后（通过 HA 操作、刷新按钮或功率插座联动触发），自动启动本地异步倒计时协程。每 60 秒在内存中平滑扣减剩余分钟数并通知界面渲染，**产生 0 次云端网络请求**，提供与 App 相同的流畅倒计时体验。
+3. **洗涤中动态同步（用户可选 · 强制 >= 5 分钟安全限制）**：
+   用户可在集成选项中自主配置是否在洗衣运转中开启动态云端轮询。**系统强制硬编码轮询间隔不得小于 5 分钟**。即使开启，30 分钟的洗涤过程仅产生约 6 次请求，绝对处于海信风控安全阈值之内。
+4. **离散事件推送闭环**：
+   洗涤完成瞬间，海信云端下发 `8001008` 推送。Home Assistant 瞬间捕获该报文，立刻终止本地倒计时，将状态更新为完成，发出系统通知与总线事件，并自动将轮询重置为 `None` 恢复待机零请求。
+
+---
+
+## 三、MQTT 服务器连接与鉴权规范
+
+### 3.1 服务器连接端点
+- **服务器主机（Broker Host）**：`thsprojuk.aliyun-hbbj-hisense.pubsub.tech`（百度智能云物联网核心套件，前端配置阿里云负载均衡）
+- **端口（Port）**：`1883`（标准 TCP 明文传输）或 `8883`（MQTTS / TLS 加密传输）
+- **协议版本**：MQTT v3.1.1 / v5.0（标准 `paho-mqtt` 客户端直接支持）
+- **心跳间隔（Keepalive）**：推荐 60 秒（定期收发 `PINGREQ` 与 `PINGRESP` 心跳）
+
+### 3.2 客户端凭据结构与 ThingIDP 协议规范
+海信智慧家采用**百度智能云物联网套件（Baidu IoT Core）`thingidp` 设备身份体系**：
+
+#### 客户端 ID（Client ID）
+- 格式：手机端设备标识，形如 `aiotfffe<32位十六进制字符>`。
+> [!WARNING]
+> **Broker 防互踢规则**：MQTT 协议强制要求同一 Broker 内 Client ID 必须全局唯一。若两个客户端使用完全相同的 Client ID 同时连入，服务器会立即掐断先连接的客户端。多端使用时必须保持会话隔离。
+
+#### 用户名生成模板（Username Template）
+```text
+{adp_type}@{IoTCoreId}|{DeviceKey}|{timestamp}|{algorithm_type}
+```
+- `adp_type`：固定为 `thingidp`；
+- `IoTCoreId`：海信云端 IoT 套件专属项目标识：`thsprojuk`；
+- `DeviceKey`：客户端设备标识 Key（与 Client ID 一致：`aiotfffe<32位字符>`）；
+- `timestamp`：时间戳占位符（可使用固定 `0`）；
+- `algorithm_type`：签名摘要算法，固定为 `MD5`。
+- **最终合成用户名格式**：
+  ```text
+  thingidp@thsprojuk|aiotfffe<32位设备ID>|0|MD5
+  ```
+
+#### 密码生成算法（Password Formula）
+```text
+password = MD5(f"{DeviceKey}&{timestamp}&{algorithm_type}{DeviceSecret}").lower()
+```
+代入海信固定参数：
+```text
+password = MD5(f"{DeviceKey}&0&MD5{DeviceSecret}").lower()
+```
+*（其中 `DeviceSecret` 为物联网套件为该设备注册时下发的通讯密钥，随设备绑定生成）。*
+
+### 3.3 云端动态配置接口
+官方手机 App 启动时，会通过 HTTP 网关动态换取最新的 MQTT 服务器与凭据配置：
+- **请求地址**：`POST https://mqtt-msg.hismarttv.com/2.0/mqtt/config`
+- **请求头（Headers）**：
   ```http
   Content-Type: application/json; charset=UTF-8
   User-Agent: JHKMain/7.0.8 (iPhone; iOS 27.0.1; Scale/3.00)
-  X-Sign-For: <Base64_MD5_Gateway_Signature>
+  X-Sign-For: <网关签名摘要>
   ```
-- **Request Body**:
+- **请求体（JSON Body）**：
   ```json
   {
     "format": 1,
     "appKey": "JHKAIHOME",
-    "deviceId": "aiotfffe<32_HEX_CLIENT_DEVICE_ID>",
+    "deviceId": "aiotfffe<32位设备ID>",
     "clientType": 0,
     "timeStamp": 1794655797.269,
     "version": "2.0",
-    "accessToken": "<YOUR_ACCESS_TOKEN>",
+    "accessToken": "<用户访问令牌>",
     "languageId": 0
   }
   ```
-- **Response**:
+- **云端响应示例**：
   ```json
   {
     "response": {
@@ -103,8 +141,8 @@ When the official mobile app starts, it issues an HTTP request to the push gatew
         "pubTopicIm": "$iot/deviceId/user/up/9/JHKAIHOME/3/1601002",
         "deviceIdSubTopic": "$iot/deviceId/user/down/JHKAIHOME/#",
         "userSubTopic": "$iot/general/user/customerId/down/JHKAIHOME/#",
-        "loginUserName": "thingidp@thsprojuk|aiotfffe<32_HEX_CLIENT_DEVICE_ID>|0|MD5",
-        "loginPassword": "<MD5_PASSWORD_HASH>",
+        "loginUserName": "thingidp@thsprojuk|aiotfffe<32位设备ID>|0|MD5",
+        "loginPassword": "<32位MD5哈希密码>",
         "logReportTags": ["2001005"]
       },
       "status": "SUCCESS"
@@ -112,48 +150,56 @@ When the official mobile app starts, it issues an HTTP request to the push gatew
   }
   ```
 
-### 2.4 Multi-Client Isolation & Anti-Collision Strategies / 多客户端会话隔离与防互踢策略
+---
 
-To avoid MQTT broker session termination (mutual kicking) between Home Assistant and the official mobile app, the following three integration strategies are available:
+## 四、多客户端会话隔离与防互踢策略
 
-1. **Path 1: Sub-Account Sharing (家庭子账号隔离机制 — 推荐普通用户，0 抓包)**:
-   - **Operation**: In the official "海信爱家" app, navigate to **我的 -> 家庭管理 -> 成员管理 -> 添加成员** (or 共享设备), and invite a family member or secondary phone number.
-   - **Integration Setup**: Sign into the Home Assistant integration using the secondary account credentials.
-   - **Advantage**: The mobile phone uses Account A (`customerId_A`, `device_A`), while Home Assistant uses Account B (`customerId_B`, `device_B`). Both have full access to household appliances, maintain independent MQTT client sessions, and **never collide**. **Requires zero network sniffing (0 抓包)**.
-   - 📖 **Detailed Guide / 详细教程**: See [Family Sub-Account Sharing Guide / 家庭副账号配置指引](SUB_ACCOUNT_GUIDE.md).
-2. **Path 2: Dedicated Sniffed Credentials (专属设备凭据 — 适合极客用户)**:
-   - **Operation**: Users sniff their own device's `deviceId` and `loginPassword` once via tools like Charles, Reqable, or Proxyman, and enter them into Home Assistant's configuration options.
-   - **Advantage**: Bypasses the shared fallback pool with 100% dedicated broker credentials.
-3. **Path 3: Gateway Dynamic Client Registration (动态网关注册逆向探索 — 正在推进中)**:
-   - Technical research is underway to extract the signing secret for `appKey: "JHKAIHOME"` on `mqtt-msg.hismarttv.com` to dynamically register virtual device keys per HA instance automatically.
+为避免 Home Assistant 与官方手机 App 之间产生 MQTT 客户端抢占互踢，有以下三种落地方案：
+
+### 方案 1：家庭子账号共享隔离（强烈推荐 · 0 抓包 · 零门槛）
+- **操作步骤**：
+  1. 在手机「海信爱家」App 中打开 **我的 -> 家庭管理 -> 成员管理 -> 添加成员**；
+  2. 使用另一个备用手机号注册副账号并接受邀请，角色设为管理员；
+  3. 为副账号设置好固定的账号密码，在 Home Assistant 中直接用副账号登录。
+- **核心优势**：
+  手机端运行在主账号（`Client_A`），Home Assistant 运行在副账号（`Client_B`）。两者在 Broker 上属于完全独立的两个长连接通道，**100% 互不干扰，永远不互踢，且完全不需要抓包**。
+- 📖 **详细配置教程**：请参阅 [海信爱家家庭副账号共享配置指引](SUB_ACCOUNT_GUIDE.md)。
+
+### 方案 2：提取专属设备抓包凭据（适合高阶玩家）
+- 用户通过抓包工具（Reqable / Charles / Proxyman）抓取自己手机连接 `mqtt/config` 时的凭据，单独填入 Home Assistant。
+
+### 方案 3：动态网关注册逆向模拟
+- 通过本地模拟签名自动换取全新设备凭据，目前因官方签名包含混淆加固，推荐首选方案 1。
 
 ---
 
-## 3. Topic Subscription Matrix / 主题订阅规范
+## 五、主题订阅矩阵与避坑指南
 
-To ensure zero dropped messages across multiple device categories, integrations **must subscribe to the full user wildcard topic** (`$iot/general/user/{customerId}/#`):
+为确保不错过任何品类设备的推送，集成**必须订阅全量用户级通配主题**（`$iot/general/user/{customerId}/#`）：
 
-| Topic Pattern | Description | 说明 |
+| 主题模式（Topic Pattern） | 优先级 | 说明 |
 | :--- | :--- | :--- |
-| `$iot/general/user/{customerId}/#` | **Mandatory** All downlink push messages for this user account across all apps and channels | **核心总线通道（必选）**：跨通道、跨品类接收全量推送 |
-| `$iot/general/user/{customerId}/down/1123840823/8001008` | Appliance cycle complete push notifications (Washer complete, etc.) | 家电设备洗涤/烘干完成等核心业务推送 |
-| `$iot/general/user/{customerId}/down/JHKAIHOME/#` | AIHome mobile app dedicated downlink channel | 爱家 App 专属业务下行通道 |
-| `$iot/{clientDeviceId}/#` | Messages routed to this specific client session | 当前客户端专属通道 |
-| `$iot/{applianceWifiId}/#` | Messages referencing physical appliance's WiFi ID | 物理设备 WiFi MAC/ID 专属推送通道 |
-| `$iot/{applianceDeviceId}/#` | Messages referencing appliance Device ID | 物理设备 Device ID 专属推送通道 |
-| `$iot/#` | Broker-level wildcard for all authorized IoT downlink messages | 云端所有已鉴权下行消息通配 |
-| `#` | Global wildcard (supported by broker) | 全局通配符（Broker 确认支持） |
+| `$iot/general/user/{customerId}/#` | **核心必选** | **用户核心总线通配符**：跨应用、跨品类接收当前家庭的所有下行推送 |
+| `$iot/general/user/{customerId}/down/1123840823/8001008` | 核心事件 | 洗衣机/干衣机洗涤完成等关键业务生命周期通知 |
+| `$iot/general/user/{customerId}/down/JHKAIHOME/#` | 业务通道 | 爱家 App 专属业务通道（主要包含部分界面同步信息） |
+| `$iot/{clientDeviceId}/#` | 客户端通道 | 指向当前连入客户端会话的专属消息 |
+| `$iot/{applianceWifiId}/#` | 设备通道 | 指向物理家电 WiFi ID 的专属推送通道 |
+| `$iot/{applianceDeviceId}/#` | 设备通道 | 指向物理家电 Device ID 的专属推送通道 |
+| `$iot/#` | 调试全量 | 允许范围内的云端已鉴权消息通配 |
+| `#` | 调试全量 | 全局通配符（Broker 鉴权规则内有效） |
 
-> ⚠️ **Critical Discovery / 避坑指南**:
-> The official cloud pushes laundry completion notifications through channel **`1123840823`** (under tag `8001008`), **NOT** through `JHKAIHOME`! If an integration only subscribes to `$iot/.../down/JHKAIHOME/#`, cycle completion messages will be **completely missed**! Subscribing to `$iot/general/user/{customerId}/#` guarantees 100% message reception.
+> [!CAUTION]
+> **重大避坑指南**：
+> 海信云端的洗涤完成通知是通过通道 **`1123840823`**（业务标签 `8001008`）下发的，**而不是通过 `JHKAIHOME` 通道下发的**！
+> 如果集成只订阅 `$iot/.../down/JHKAIHOME/#`，洗涤完成推送将被**完全漏掉**！必须订阅 `$iot/general/user/{customerId}/#` 才能确保 100% 接收全量业务事件。
 
 ---
 
-## 4. Message Envelopes & Payload Schema / 推送报文规范
+## 六、报文格式与有效载荷解析
 
-All Hisense MQTT messages arrive as a JSON envelope containing metadata and an inner payload.
+海信 MQTT 推送采用两层嵌套结构：外层为通用的 Envelope 封装，内层 `text` 字段包含具体的业务载荷 JSON 字符串。
 
-### 4.1 Outer Envelope Structure / 外层封装报文
+### 6.1 外层封装报文结构
 ```json
 {
   "businessTag": "JHkDeviceChangeBizMessage",
@@ -166,20 +212,20 @@ All Hisense MQTT messages arrive as a JSON envelope containing metadata and an i
   "msgVersion": 1,
   "pushType": 2,
   "targetCustomerId": "<CUSTOMER_ID>",
-  "targetDeviceId": "aiotfffe<32_HEX_CLIENT_DEVICE_ID>",
+  "targetDeviceId": "aiotfffe<32位设备ID>",
   "text": "{\"action\":\"onDeviceStateUpdate\", ...}",
   "signatureServer": "..."
 }
 ```
 
-### 4.2 Inner Payload Types (`text` field) / 内层有效载荷
+### 6.2 内层有效载荷解析（4 种核心模式）
 
-#### Pattern A: Incremental State Change (`changeInfo`) / 增量状态更新
-Sent when specific attributes change (e.g. power toggled, speed adjusted):
+#### 模式一：增量状态更新（`changeInfo`）
+当设备的某个特定参数发生改变时触发（如用户旋转旋钮调速、开启童锁）：
 ```json
 {
   "action": "onDeviceStateUpdate",
-  "devId": "<APPLIANCE_DEVICE_ID>",
+  "devId": "<设备ID>",
   "changeInfo": {
     "powerStatus": [1, 0],
     "runStatus": [4, 2],
@@ -188,14 +234,14 @@ Sent when specific attributes change (e.g. power toggled, speed adjusted):
   }
 }
 ```
-*Note*: `changeInfo` arrays provide `[new_value, old_value]`.
+*说明*：`changeInfo` 的数组格式为 `[新值, 旧值]`，便于直接增量更新实体。
 
-#### Pattern B: Full State Dictionary Snapshot (`status`) / 全量状态快照
-Sent upon significant program transitions or initial status broadcast:
+#### 模式二：全量状态快照（`status`）
+在运行程序发生重要阶段转换或设备首次上报时触发：
 ```json
 {
   "action": "onDeviceStateUpdate",
-  "devId": "<APPLIANCE_DEVICE_ID>",
+  "devId": "<设备ID>",
   "status": {
     "powerStatus": "1",
     "runStatus": "4",
@@ -212,9 +258,9 @@ Sent upon significant program transitions or initial status broadcast:
   }
 }
 ```
-*Optimization*: When `status` is present, update the integration's memory state directly via `_update_from_states(status)` without querying the HTTP API!
+*优化策略*：当报文中直接携带 `status` 字典时，直接在内存中更新实体状态，无需再次发起 HTTP 云端请求。
 
-#### Pattern C: Environmental / Home-Wide Notifications / 家庭环境事件广播
+#### 模式三：家庭环境广播事件（`HomeStatusChanged`）
 ```json
 {
   "action": "HomeStatusChanged",
@@ -225,10 +271,9 @@ Sent upon significant program transitions or initial status broadcast:
   ]
 }
 ```
-*Handling*: When payload contains an event trigger without a full state dictionary, schedule a single on-demand cloud refresh (`coord.async_start_refresh()`).
 
-#### Pattern D: Cycle Completion & Notification Push (`msgContent`) / 洗涤完成与业务事件通知
-Sent when a major lifecycle event completes (such as washing machine cycle complete):
+#### 模式四：业务生命周期与洗涤完成通知（`msgContent`）
+洗衣机运行结束时由业务中心推送：
 ```json
 {
   "businessTag": "8001008",
@@ -245,117 +290,77 @@ Sent when a major lifecycle event completes (such as washing machine cycle compl
   "operationType": 28677,
   "pushType": 2,
   "targetCustomerId": "<CUSTOMER_ID>",
-  "targetDeviceId": "aiotfffe<32_HEX_CLIENT_DEVICE_ID>",
+  "targetDeviceId": "aiotfffe<32位设备ID>",
   "text": "{\"msgContent\":\"洗衣机已洗衣完毕，快去处理吧\",\"msgTitle\":\"设备通知\",\"msgType\":2000}"
 }
 ```
-*Zero-Latency Handling*:
-1. Display the human-readable notification text (`msgContent`) immediately on the entity's latest push sensor (`sensor.*_latest_push`).
-2. When `businessTag == "8001008"` or `msgContent` indicates completion, immediately perform in-memory state transition (`run_status = 7` (complete), `remain_time = 0`, `start_pause_status = False`) without querying the cloud HTTP API!
-3. Fire the `hisense_washer_complete` event on the Home Assistant event bus and issue a persistent notification.
+*零延迟处理链路*：
+1. 直接提取 `msgContent` 文字，即时显示在「最新推送内容」实体上；
+2. 当检测到业务标签为 `8001008` 或包含“洗衣完毕”时，立即在内存中切换 `run_status = 7`（完成），`remain_time = 0`，`is_running = False`；
+3. 立即向 Home Assistant 事件总线派发 `hisense_washer_complete` 事件，并弹出持久化通知。
 
 ---
 
-## 5. Device Attribute Mapping Reference / 设备字段速查与对接指南
+## 七、全品类家电设备字段速查对照表
 
-### 5.1 Washing Machines & Dryers / 洗衣机与干衣机
-| Field | Type | Values & Meanings | 说明 |
+### 7.1 洗衣机与干衣机（核心字段）
+| 字段名称 | 类型 | 取值范围与含义 | 对应实体说明 |
 | :--- | :--- | :--- | :--- |
-| `powerStatus` | string/int | `"1"`: On, `"0"`: Off | 电源开关状态 |
-| `startPauseStatus` | string/int | `"0"`: Standby, `"1"`: Paused, `"2"`: Running | 运行/暂停核心标志位 |
-| `startStop` | string/int | `"1"`: Start, `"0"`: Stop | 启停状态 |
-| `runStatus` | int | `0`: 待机 (Standby)<br>`1`: 预约等待 (Reservation)<br>`2`: 主洗/称重 (Main wash)<br>`3`: 漂洗 (Rinse)<br>`4`: 脱水 (Spin)<br>`5`: 烘干 (Drying)<br>`7`: 洗涤完成 (Complete)<br>`10`: 抖散 (Air dry)<br>`11`: 防皱 (Fresh care) | 当前洗涤阶段枚举 |
-| `workMode` | int | Program code (`2`: 混合, `35`: 单烘, `22`: AI智洗, etc.) | 洗涤程序代码 |
-| `remainRunTime` | int | Remaining minutes | 剩余运转分钟数 |
-| `washTemperature`| int | Water temp in °C (`0`: Cold, `20`, `30`, `40`, `60`, `95`) | 洗涤水温 |
-| `dehydrationSpeed`| int | Spin speed RPM (`0`: No spin, `400` ~ `1400`) | 脱水转速 |
-| `dryingMethod` | int | `0`: Off, `1`: Extra Dry (即穿), `2`: Iron Dry (即熨), `3`: Cupboard Dry (即存), `30`-`240`: Timed Dry (min) | 烘干模式与定时 |
-| `dryingModes` | int | `1`: Low-temperature softbaking (低温烘), `0`: Standard | 低温烘干开关 |
-| `doorLockStatus` | string/int | `"1"`: Locked, `"0"`: Unlocked | 门锁物理状态 |
-| `childLock` | string/int | `"1"`: Locked, `"0"`: Unlocked (Only settable when machine is running) | 童锁状态 |
-| `detergentLackStatus` | string/int | `"0"`: Normal (充足), `"1"`: Empty/Lack (洗涤剂不足告警) | 洗涤剂耗材余量告警 |
-| `softenLackStatus` | string/int | `"0"`: Normal (充足), `"1"`: Empty/Lack (柔顺剂不足告警) | 柔顺剂耗材余量告警 |
-| `detergentMode` | int | Auto dispenser dosage level (`0`: Off, `1`: Normal, `2`: More, `3`: Less) | 洗涤剂自动投放挡位 |
-| `softenMode` | int | Auto softener dosage level (`0`: Off, `1`: Normal, `2`: More, `3`: Less) | 柔顺剂自动投放挡位 |
+| `powerStatus` | string/int | `"1"`: 开机, `"0"`: 关机 | 电源开关实体 |
+| `startPauseStatus` | string/int | `"0"`: 待机, `"1"`: 暂停, `"2"`: 运转中 | 运转/暂停状态 |
+| `startStop` | string/int | `"1"`: 启动, `"0"`: 停止 | 启停状态标志 |
+| `runStatus` | int | `0`: 待机<br>`1`: 预约等待<br>`2`: 主洗/称重<br>`3`: 漂洗<br>`4`: 脱水<br>`5`: 烘干<br>`7`: 完成<br>`10`: 抖散<br>`11`: 防皱 | 当前洗涤阶段枚举 |
+| `workMode` | int | 程序编号代码（`2`: 混合, `35`: 单烘, `22`: AI智洗, `40`: 速净 等） | 洗涤程序选择实体 |
+| `remainRunTime` | int | 剩余运转分钟数 | 剩余时间实体（支持本地平滑倒计时） |
+| `washTemperature`| int | 水温（`0`: 冷水, `20`, `30`, `40`, `60`, `95` ℃） | 洗涤温度选择实体 |
+| `dehydrationSpeed`| int | 转速（`0`: 不脱水, `400` ~ `1400` 转） | 脱水转速选择实体 |
+| `dryingMethod` | int | `0`: 关闭, `1`: 即穿, `2`: 即熨, `3`: 即存, `30`-`240`: 定时烘干（分） | 烘干模式选择实体 |
+| `dryingModes` | int | `1`: 低温烘干, `0`: 标准烘干 | 低温烘干开关实体 |
+| `doorLockStatus` | string/int | `"1"`: 已上锁, `"0"`: 未锁 | 门锁物理状态传感器 |
+| `childLock` | string/int | `"1"`: 开启, `"0"`: 关闭 | 运转童锁开关实体 |
+| `detergentLackStatus` | string/int | `"0"`: 充足, `"1"`: 耗尽不足 | 洗涤剂缺料告警传感器 |
+| `softenLackStatus` | string/int | `"0"`: 充足, `"1"`: 耗尽不足 | 柔顺剂缺料告警传感器 |
+| `detergentMode` | int | 自动投放量（`0`: 关闭, `1`: 标准, `2`: 多, `3`: 少） | 洗涤剂投放挡位实体 |
+| `softenMode` | int | 柔顺剂投放量（`0`: 关闭, `1`: 标准, `2`: 多, `3`: 少） | 柔顺剂投放挡位实体 |
 
-### 5.2 Air Conditioners / 空调
-| Field | Type | Values & Meanings | 说明 |
+### 7.2 空调
+| 字段名称 | 类型 | 取值范围与含义 | 对应实体说明 |
 | :--- | :--- | :--- | :--- |
-| `powerStatus` | string/int | `"1"`: On, `"0"`: Off | 开机/关机 |
-| `workMode` | int | `0`: Cool (制冷), `1`: Dry (除湿), `2`: Fan (送风), `3`: Heat (制热), `4`: Auto (智能) | 运转模式 |
-| `setTemp` | float | Target temperature (°C, 16.0 ~ 32.0) | 设定温度 |
-| `windSpeed` | int | `0`: Auto, `1`: Low, `2`: Medium, `3`: High, `4`: Turbo | 风速档位 |
-| `indoorTemp` | float | Current ambient room temperature | 室内实测温度 |
+| `powerStatus` | string/int | `"1"`: 开机, `"0"`: 关机 | 空调开关 |
+| `workMode` | int | `0`: 制冷, `1`: 除湿, `2`: 送风, `3`: 制热, `4`: 智能/自动 | 运转模式（HVAC Mode） |
+| `setTemp` | float | 目标设定温度（16.0 ~ 32.0 ℃） | 设定温度（Target Temp） |
+| `windSpeed` | int | `0`: 自动, `1`: 低风, `2`: 中风, `3`: 高风, `4`: 强力风 | 风速选择 |
+| `indoorTemp` | float | 室内实测环境温度 | 当前室温传感器 |
 
-### 5.3 Refrigerators / 冰箱
-| Field | Type | Values & Meanings | 说明 |
+### 7.3 冰箱
+| 字段名称 | 类型 | 取值范围与含义 | 对应实体说明 |
 | :--- | :--- | :--- | :--- |
-| `coldClosetTemp` | int | Cold compartment set temperature (°C, 2 ~ 8) | 冷藏室设定温度 |
-| `freezeClosetTemp`| int | Freezer set temperature (°C, -24 ~ -15) | 冷冻室设定温度 |
-| `refrigeratorRealTemperature` | int | Real-time sensor temperature | 实时温区温度 |
-| `superCool` | int | `1`: Fast cooling active | 速冷模式 |
-| `superFreeze` | int | `1`: Fast freezing active | 急冻模式 |
-| `degerming` | int | `1`: Plasma sterilization active | 净味除菌开关 |
-| `doorOpenStatus` | int | `1`: Door left open warning | 门未关严警报 |
+| `coldClosetTemp` | int | 冷藏室设定温度（2 ~ 8 ℃） | 冷藏室目标温度 |
+| `freezeClosetTemp`| int | 冷冻室设定温度（-24 ~ -15 ℃） | 冷冻室目标温度 |
+| `refrigeratorRealTemperature` | int | 实时测温传感器数据 | 各温区实时温度 |
+| `superCool` | int | `1`: 开启速冷, `0`: 关闭 | 速冷模式开关 |
+| `superFreeze` | int | `1`: 开启急冻, `0`: 关闭 | 急冻模式开关 |
+| `degerming` | int | `1`: 开启净味除菌 | 净味除菌开关 |
+| `doorOpenStatus` | int | `1`: 门未关好告警 | 门开超时告警传感器 |
 
-### 5.4 Dishwashers & Ovens / 洗碗机与蒸烤箱
-- **Dishwashers (洗碗机)**: `runStatus` 映射为 `0: 待机, 1: 预洗, 2: 主洗, 3: 漂洗, 4: 烘干, 7: 完成`。
-- **Ovens/Steamers (蒸烤箱)**: `workMode` 表示烘烤/纯蒸模式；`targetTemp` 与 `remainRunTime` 表示设定温度与剩余时间。
+### 7.4 洗碗机与蒸烤箱
+- **洗碗机**：`runStatus` 状态映射为 `0: 待机, 1: 预洗, 2: 主洗, 3: 漂洗, 4: 烘干, 7: 完成`。
+- **蒸烤箱**：`workMode` 对应各烹饪模式；`targetTemp` 与 `remainRunTime` 分别表示设定温度与剩余烘烤时间。
 
 ---
 
-## 6. Implementation Best Practices for Home Assistant / 集成开发最佳实践
+## 八、Home Assistant 开发者最佳实践
 
-1. **Keep `update_interval = None` (保持零轮询)**:
-   Never configure regular polling on device update coordinators for appliances. Let MQTT handle state propagation to protect user accounts from being blocked.
-   切勿为家电设备的 Coordinator 配置定时周期轮询。完全由 MQTT 推送驱动，杜绝高频请求封号风险。
-2. **Handle Threading Safely (主事件循环安全调度)**:
-   The Paho MQTT client callbacks run on a background thread. Always dispatch updates to Home Assistant's event loop:
+1. **坚持待机 0 轮询（`update_interval = None`）**：
+   家电设备在闲置、关机或待机时，切勿配置定时周期轮询。完全依托 MQTT 推送驱动，杜绝被海信云端封号的隐患。
+2. **跨线程安全派发（Thread-Safe Dispatch）**：
+   Paho MQTT 回调运行于后台线程中，所有状态变更必须安全派发至 Home Assistant 的主事件循环：
    ```python
    loop.call_soon_threadsafe(callback, device_id, message_data)
    ```
-3. **Parse Direct State Snapshots (`raw_states`) (直接解析全量状态快照)**:
-   If incoming MQTT messages include `status` dictionaries, update device attributes in-memory directly without triggering any HTTP round-trip.
-   推送携带 `status` 字段时，直接在内存中解析并触发实体更新，无需再向云端发请求。
-4. **Coalesce Downstream Refreshes (合并防抖刷新)**:
-   When receiving general events (e.g. `HomeStatusChanged`), coalesce refreshes with debouncing so multiple simultaneous messages don't generate redundant HTTP queries.
-5. **Fire Home Assistant Events (广播标准化系统总线事件)**:
-   Fire `hisense_mqtt_message` on the event bus for all incoming payloads to allow user automations, and `hisense_washer_complete` when cycles finish.
-   收到推送时在 HA 事件总线上广播 `hisense_mqtt_message`，洗涤完成时触发 `hisense_washer_complete`，极大方便用户编写自动化联动。
-
----
-
-## 7. App-Parity Architecture: Event Push & Local Countdown / 模拟官方 App 混合架构规范
-
-Through comprehensive binary decompilation of the official Hisense AIHome APK (`libapp.so`), the underlying design of appliance synchronization was uncovered:
-
-通过对海信爱家官方 APK 核心动态库（`libapp.so`）的深度反编译，揭示了官方 App 的状态同步底层架构机制：
-
-### 7.1 Why Standby Power-On Has No MQTT Push / 为什么开机与运行中没有 MQTT 推送？
-- **Discrete Notifications vs Telemetry Streams (通知与遥测分离)**:
-  Hisense IoT cloud separates continuous appliance telemetry from user notifications. The appliance reports high-frequency protocol updates to the cloud backend over its internal device channel. The cloud backend **does not broadcast high-frequency state updates (power-on, per-minute timer countdowns) to the mobile client topic `$iot/general/user/{customerId}/#`**.
-  海信 IoT 云端严格区分了“遥测数据流”与“通知消息”。洗衣机通过专有设备通道向云端上报高频数据，但云端**并不会把每一次开机、转速变化或分钟倒计时流向用户的 MQTT 通道**。
-- **Official App Behavior (官方 App 处理方式)**:
-  `LargeDevCardMultiWasherVM` does not implement `JhkMqttConsumer`. Instead, when the user opens the App card, it makes an on-demand HTTP query (`check_status`). If running, the App activates `_startTimeUpdateMode`, initiating a local countdown timer on the phone that ticks down remaining minutes locally, rather than streaming per-minute MQTT messages from the server.
-  官方 App 洗衣机卡片没有实现 MQTT 消费者，而是在进入卡片时发起单次 HTTP 查询，一旦检测到运转，App 本地启动 `_startTimeUpdateMode` 自行进行分钟倒计时，而非依赖云端持续推流。
-
-### 7.2 Home Assistant App-Parity Design / Home Assistant 拟真还原设计
-To deliver an optimal user experience while strictly adhering to zero-ban safety rules:
-为了在绝对保障 0 封号安全的前提下，提供与官方 App 相同的丝滑体验，集成采用以下三层拟真架构：
-
-1. **Standby State: Zero Polling / 关机/待机：严格零轮询**:
-   - `update_interval = None`: When idle, no HTTP requests are ever made. 100% immune to cloud frequency limits or IP blocks.
-   - 待机与关机状态下完全不向云端发起任何轮询（0次请求），彻底杜绝封号隐患。
-2. **Running State: Local Virtual Countdown / 运行中：本地分钟虚拟倒计时**:
-   - When running state is confirmed (via HA manual refresh button, power plug automation, or cycle start), HA initializes `_start_app_countdown`.
-   - Every 60 seconds, remaining minutes smoothly decrement in-memory and notify entity listeners, updating the UI smoothly with **0 network requests**.
-   - 检测到开机运转时，自动启动本地虚拟倒计时，每 60 秒在内存中平滑扣减剩余时间并刷新实体，UI 实时倒计时，**产生 0 次云端网络请求**。
-3. **Optional Dynamic Wash Polling (>= 5min Safe Rate) / 用户可选动态轮询（强制 >= 5分钟保底）**:
-   - Users can configure whether to enable periodic cloud sync *during washing* in Integration Options (`enable_washer_dynamic_poll`).
-   - **Hard Safety Limit**: Enforces a minimum interval of **at least 5 minutes** (`MIN_WASHER_POLL_INTERVAL = 5`). Even if enabled, a 30-minute wash cycle generates only ~6 requests, far below cloud anti-scraping thresholds.
-   - 用户可在集成选项中自主选择是否在洗涤中开启定时校验。**强制硬编码轮询间隔不得小于 5 分钟**。即便开启，30 分钟洗涤仅请求 6 次，处于绝对安全的白名单频次内。
-4. **Lifecycle Push Completion / 离散事件推送闭环**:
-   - When the cycle completes, Hisense cloud pushes `businessTag: 8001008` (`"洗衣机已洗衣完毕，快去处理吧"`).
-   - HA instantly catches this MQTT push, cancels the local countdown (`_stop_app_countdown`), resets entities to complete/idle, fires `hisense_washer_complete`, and sets `update_interval = None`.
-   - 洗涤完成时云端下发 `8001008` 推送，HA 瞬间捕获，立即停止倒计时，重置实体状态为完成，并切断轮询恢复待机零请求。
-
+3. **快照优先直接更新（Skip Redundant HTTP）**：
+   若推送数据直接携带了 `status` 字典，直接在内存中更新实体属性并刷新侦听器，避免发起二次 HTTP 查询。
+4. **广播标准化总线事件（Event-Driven Automation）**：
+   收到推送时在事件总线上派发 `hisense_mqtt_message`，洗涤结束时派发 `hisense_washer_complete`，极大方便用户通过自动化联动小爱音箱播报或手机推送信鸽。
+5. **洗涤中轮询强制风控保底（>= 5 分钟限制）**：
+   若提供运行中动态轮询选项，必须在配置流与后台调度器中双重锁定最低时间阈值（不得小于 5 分钟），保护用户账号安全。
