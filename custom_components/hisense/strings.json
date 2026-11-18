@@ -93,6 +93,11 @@
     }
   },
   "entity": {
+    "water_heater": {
+      "water_heater": {
+        "name": "Water Heater"
+      }
+    },
     "climate": {
       "thermostat": {
         "name": "Climate"
@@ -378,6 +383,9 @@
       },
       "fresh_air_mode_select": {
         "name": "Fresh Air Mode"
+      },
+      "water_heater_mode": {
+        "name": "Water Heater Mode"
       }
     },
     "sensor": {

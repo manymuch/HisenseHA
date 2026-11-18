@@ -743,6 +743,7 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
         "binary_sensor",
         "select",
         "media_player",
+        "water_heater",
     ]
     await hass.config_entries.async_forward_entry_setups(entry, platforms)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
@@ -764,6 +765,7 @@ async def async_unload_entry(hass: core.HomeAssistant, entry: config_entries.Con
         "binary_sensor",
         "select",
         "media_player",
+        "water_heater",
     ]
     unload_ok = await hass.config_entries.async_unload_platforms(entry, platforms)
     if unload_ok:

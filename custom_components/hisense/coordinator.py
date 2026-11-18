@@ -73,7 +73,7 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         initial_interval = (
             timedelta(seconds=_FRIDGE_SCAN_INTERVAL)
-            if device_type in ("冰箱", "酒柜")
+            if device_type in ("冰箱", "酒柜", "热水器")
             else None
         )
 

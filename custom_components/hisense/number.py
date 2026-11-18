@@ -254,7 +254,7 @@ class HisenseOvenCookTimeNumber(HisenseEntity, NumberEntity):
 
 class HisenseWaterHeaterTargetTemperatureNumber(HisenseEntity, NumberEntity):
     _attr_translation_key = "water_heater_target_temperature"
-    _attr_native_min_value = 35
+    _attr_native_min_value = 30
     _attr_native_max_value = 75
     _attr_native_step = 1
     _attr_mode = NumberMode.BOX

@@ -93,6 +93,11 @@
     }
   },
   "entity": {
+    "water_heater": {
+      "water_heater": {
+        "name": "热水器"
+      }
+    },
     "climate": {
       "thermostat": {
         "name": "空调"
@@ -387,6 +392,9 @@
       },
       "fresh_air_mode_select": {
         "name": "新风系统工作模式"
+      },
+      "water_heater_mode": {
+        "name": "热水器工作模式"
       }
     },
     "sensor": {

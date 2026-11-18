@@ -29,6 +29,9 @@ from .pyhisenseapi import (
     DEHUMIDIFIER_MODE_REVERSE_MAP,
     FRESH_AIR_MODE_MAP,
     FRESH_AIR_MODE_REVERSE_MAP,
+    WATER_HEATER_MODES,
+    WATER_HEATER_MODE_TO_ID,
+    WATER_HEATER_MODE_REVERSE_MAP,
 )
 
 WASHER_SPIN_OPTIONS = list(WASHER_SPIN_MAP.keys())
@@ -181,6 +184,10 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     fresh_air_coordinators = [c for c in coordinators.values() if c.device_type == "新风系统"]
     if fresh_air_coordinators:
         async_add_entities([HisenseFreshAirModeSelect(c) for c in fresh_air_coordinators])
+
+    water_heater_coordinators = [c for c in coordinators.values() if c.device_type == "热水器"]
+    if water_heater_coordinators:
+        async_add_entities([HisenseWaterHeaterModeSelect(c) for c in water_heater_coordinators])
 
 
 class HisenseFridgeModeSelect(HisenseEntity, SelectEntity):
@@ -721,3 +728,39 @@ class HisenseFreshAirModeSelect(HisenseEntity, SelectEntity):
             self.coordinator.async_update_from_client()
             return
         raise HomeAssistantError(f"Failed to set fresh air mode to {option}")
+
+
+class HisenseWaterHeaterModeSelect(HisenseEntity, SelectEntity):
+    _attr_translation_key = "water_heater_mode"
+    _attr_icon = "mdi:water-boiler"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "water_heater_mode", "water_heater_mode")
+        self._attr_options = list(WATER_HEATER_MODES.values())
+
+    @property
+    def options(self) -> list[str]:
+        curr = self.current_option
+        if curr is not None and curr not in self._attr_options:
+            return list(self._attr_options) + [curr]
+        return self._attr_options
+
+    @property
+    def current_option(self):
+        val = self.status.get("work_mode")
+        return _safe_lookup_option(val, WATER_HEATER_MODE_REVERSE_MAP, self._attr_options, "模式")
+
+    async def async_select_option(self, option: str):
+        mode_id = WATER_HEATER_MODE_TO_ID.get(option)
+        if mode_id is None:
+            if str(option).isdigit():
+                mode_id = int(option)
+            else:
+                raise HomeAssistantError(f"Unsupported water heater mode: {option}")
+        if not self.status.get("power_on"):
+            await self.client.turn_on()
+        if await self.client.set_mode(mode_id):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError(f"Failed to set water heater mode to {option}")
+
