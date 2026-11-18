@@ -11,8 +11,32 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
-from .pyhisenseapi import HiSenseAC, HiSenseDryer, HiSenseFridge, HiSenseWasher
+from .const import (
+    DOMAIN,
+    CONF_ENABLE_WASHER_POLL,
+    CONF_WASHER_POLL_INTERVAL,
+    DEFAULT_ENABLE_WASHER_POLL,
+    DEFAULT_WASHER_POLL_INTERVAL,
+    MIN_WASHER_POLL_INTERVAL,
+    CONF_ENABLE_PERIODIC_POLL,
+    DEFAULT_ENABLE_PERIODIC_POLL,
+)
+from .pyhisenseapi import (
+    HiSenseAC,
+    HiSenseDryer,
+    HiSenseFridge,
+    HiSenseWasher,
+    HiSenseTV,
+    HiSenseOven,
+    HiSenseDishwasher,
+    HiSenseWaterHeater,
+    HiSenseHood,
+    HiSenseStove,
+    HiSenseDehumidifier,
+    HiSenseFreshAir,
+    HiSenseWineCabinet,
+    _HiSenseDevice,
+)
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -21,15 +45,8 @@ _RETRY_DELAY = 60.0
 _MAX_ATTEMPTS = 3
 
 #: 冰箱定时轮询间隔（秒）。
-#:
-#: 冰箱是唯一"人不在跟前、状态却要主动看"的设备：门有没有关严、除菌跑完没有、
-#: 压缩机停没停，这些都不会因为用户操作 HA 而触发回读。没有轮询时，这些状态
-#: 只会在 HA 启动/重载或手动点「强制更新」时刷新，门开了几个小时都不会报警。
-#:
-#: 60 秒是折中：设备上报云端本身有节流（抓包里 reportTime 比请求时间晚约 1 分钟），
-#: 轮询再快也拿不到更新的数据，只会白耗请求额度。空调/洗衣机保持原来的
-#: 事件驱动（不轮询），因为它们的操作都发生在 HA 里，控制后 1 秒就会回读。
 _FRIDGE_SCAN_INTERVAL = 60
+#: 洗衣机/干衣机/空调遵循纯事件驱动（不主动轮询，防止频繁请求导致封号），完全依赖 MQTT 实时推送与操作回读。
 
 
 
@@ -39,7 +56,7 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def __init__(
         self,
         hass: HomeAssistant,
-        client: HiSenseAC | HiSenseDryer | HiSenseFridge | HiSenseWasher,
+        client: _HiSenseDevice,
         device_type: str = "空调",
         entry=None,
     ) -> None:
@@ -50,18 +67,30 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         #: 上一次成功读到云端数据的本地时刻。设备自己报的 ``reportTime``
         #: 缺失时（少数机型）用它兜底，让「上次数据更新时间」实体始终有值。
         self.last_success_time: datetime | None = None
+        self.last_push: dict[str, Any] | None = None
+        self.push_history: list[dict[str, Any]] = []
+        self._was_running = False
+        self._countdown_task: asyncio.Task | None = None
+        self._estimated_end_time: datetime | None = None
+
+        # 定时轮询补偿：根据用户配置选择是否开启（默认关闭以防封号，依赖 MQTT 实时推送）
+        options = entry.options if entry else {}
+        enable_periodic_poll = options.get(
+            CONF_ENABLE_PERIODIC_POLL, DEFAULT_ENABLE_PERIODIC_POLL
+        )
+
+        initial_interval = (
+            timedelta(seconds=_FRIDGE_SCAN_INTERVAL)
+            if (enable_periodic_poll and device_type in ("冰箱", "酒柜", "热水器"))
+            else None
+        )
+
         super().__init__(
             hass,
             _LOGGER,
             name=f"{DOMAIN}_{client.device_id}",
-            update_interval=(
-                timedelta(seconds=_FRIDGE_SCAN_INTERVAL)
-                if device_type == "冰箱"
-                else None
-            ),
+            update_interval=initial_interval,
         )
-        # No first refresh has completed; HA's coordinator defaults this to True.
-        self.last_update_success = False
 
     async def _read_status(self) -> dict[str, Any] | None:
         """Read device state, keeping optional energy data best effort."""
@@ -79,40 +108,32 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return status
 
     async def _async_update_data(self) -> dict[str, Any]:
-        """Try a fresh sign-in after a failed read, at most three times."""
-        for attempt in range(1, _MAX_ATTEMPTS + 1):
-            request_token = self.client.access_token
-            if request_token:
-                try:
-                    status = await self._read_status()
-                except Exception:
-                    _LOGGER.warning("Hisense %s status read failed", self.device_type, exc_info=True)
-                    status = None
-                if status:
-                    return status
+        """Fetch status and recover account access once if token expired."""
+        request_token = self.client.access_token
+        if request_token:
+            try:
+                status = await self._read_status()
+            except Exception:
+                _LOGGER.warning("Hisense %s status read failed", self.device_type, exc_info=True)
+                status = None
+            if status:
+                self._adjust_poll_interval(status)
+                return status
 
-            if not self.client.username or not self.client.password:
-                raise UpdateFailed("Hisense AIHome credentials need reauthentication")
+        if not self.client.username or not self.client.password:
+            raise UpdateFailed("Hisense AIHome credentials need reauthentication")
 
-            if await self.client.refresh(force=True, previous_token=request_token):
-                try:
-                    status = await self._read_status()
-                except Exception:
-                    _LOGGER.warning("Hisense %s status retry failed", self.device_type, exc_info=True)
-                    status = None
-                if status:
-                    return status
+        if await self.client.refresh(force=True, previous_token=request_token):
+            try:
+                status = await self._read_status()
+            except Exception:
+                _LOGGER.warning("Hisense %s status retry failed", self.device_type, exc_info=True)
+                status = None
+            if status:
+                self._adjust_poll_interval(status)
+                return status
 
-            if attempt < _MAX_ATTEMPTS:
-                _LOGGER.warning(
-                    "Hisense %s status recovery attempt %s/%s failed; retrying in 60 seconds",
-                    self.device_type, attempt, _MAX_ATTEMPTS,
-                )
-                await asyncio.sleep(_RETRY_DELAY)
-
-        raise UpdateFailed(
-            f"Failed to fetch Hisense {self.device_type} status after {_MAX_ATTEMPTS} attempts"
-        )
+        raise UpdateFailed(f"Failed to fetch Hisense {self.device_type} status")
 
     def async_start_refresh(self, *, delay: float = 0) -> None:
         """Coalesce manual and control-triggered refreshes into one task."""
@@ -143,13 +164,180 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if self._refresh_task is asyncio.current_task():
                 self._refresh_task = None
 
+    def async_set_updated_data(self, data: dict[str, Any]) -> None:
+        """Update coordinator data and adjust dynamic polling interval."""
+        if isinstance(data, dict):
+            self._adjust_poll_interval(data)
+        super().async_set_updated_data(data)
+
+    def _start_app_countdown(self, status: dict[str, Any]) -> None:
+        """Mimic Hisense App's _startTimeUpdateMode to run a smooth local countdown."""
+        remain_mins = status.get("remaining_minutes")
+        if remain_mins is None:
+            val = status.get("remainRunTime")
+            if val is None and isinstance(status.get("protocol_nonzero_values"), dict):
+                val = status["protocol_nonzero_values"].get("remainRunTime")
+            if val is not None and str(val).isdigit():
+                remain_mins = int(val)
+
+        if remain_mins and remain_mins > 0:
+            self._estimated_end_time = dt_util.utcnow() + timedelta(minutes=remain_mins)
+            if self._countdown_task is None or self._countdown_task.done():
+                _LOGGER.debug(
+                    "Starting App countdown timer for %s: %d minutes (est. finish %s)",
+                    self.name,
+                    remain_mins,
+                    self._estimated_end_time,
+                )
+                self._countdown_task = self.hass.async_create_task(
+                    self._async_countdown_loop()
+                )
+
+    def _stop_app_countdown(self) -> None:
+        """Mimic Hisense App's _stopTimerUpdateMode to end the countdown."""
+        if self._countdown_task and not self._countdown_task.done():
+            self._countdown_task.cancel()
+            _LOGGER.debug("Stopped App countdown timer for %s", self.name)
+        self._countdown_task = None
+        self._estimated_end_time = None
+
+    async def _async_countdown_loop(self) -> None:
+        """Local minute countdown ticker without querying cloud servers."""
+        try:
+            while True:
+                await asyncio.sleep(60)
+                if not self._estimated_end_time:
+                    break
+                now = dt_util.utcnow()
+                diff_secs = (self._estimated_end_time - now).total_seconds()
+                if diff_secs <= 0:
+                    _LOGGER.debug("App countdown completed for %s; requesting sync", self.name)
+                    self.async_start_refresh()
+                    break
+
+                mins_left = max(1, int(diff_secs / 60))
+                if self.data and isinstance(self.data, dict):
+                    self.data["remaining_minutes"] = mins_left
+                    if isinstance(self.data.get("protocol_nonzero_values"), dict):
+                        self.data["protocol_nonzero_values"]["remainRunTime"] = str(mins_left)
+                if hasattr(self.client, "status") and isinstance(self.client.status, dict):
+                    self.client.status["remaining_minutes"] = mins_left
+                self.async_update_listeners()
+        except asyncio.CancelledError:
+            pass
+        except Exception as err:
+            _LOGGER.debug("Error in app countdown loop for %s: %s", self.name, err)
+        finally:
+            self._countdown_task = None
+
+    def _adjust_poll_interval(self, status: dict[str, Any]) -> None:
+        """Process status updates, manage App countdown timer, and adjust polling interval."""
+        self._check_washer_completion(status)
+
+        if self.device_type not in ("洗衣机", "干衣机", "洗碗机", "烤箱"):
+            return
+
+        is_running = bool(status.get("is_running") or status.get("machine_state") in ("running", "preheating", "storing"))
+        is_complete = (
+            status.get("machine_state") == "complete"
+            or status.get("run_status") in (4, 7)
+            or status.get("phase") in (4, 7)
+        )
+
+        if is_running and not is_complete:
+            # 1. 启动类似海信 App 的本地倒计时模式 (_startTimeUpdateMode)
+            self._start_app_countdown(status)
+
+            # 2. 检查用户是否开启了洗涤/运行中动态轮询
+            options = self._entry.options if self._entry else {}
+            enable_poll = options.get(CONF_ENABLE_WASHER_POLL, DEFAULT_ENABLE_WASHER_POLL)
+            if enable_poll and self.device_type in ("洗衣机", "干衣机"):
+                poll_interval = options.get(CONF_WASHER_POLL_INTERVAL, DEFAULT_WASHER_POLL_INTERVAL)
+                safe_interval = max(MIN_WASHER_POLL_INTERVAL, int(poll_interval))
+                new_interval = timedelta(minutes=safe_interval)
+                if self.update_interval != new_interval:
+                    self.update_interval = new_interval
+                    _LOGGER.info(
+                        "Hisense %s is running. Dynamic cloud polling active: every %d minutes (safe rate)",
+                        self.device_type,
+                        safe_interval,
+                    )
+            else:
+                if self.update_interval is not None:
+                    self.update_interval = None
+                    _LOGGER.debug(
+                        "Hisense %s is running. Dynamic polling disabled; relying on App countdown timer and MQTT push.",
+                        self.device_type,
+                    )
+        else:
+            # 停机/待机/完成：停止本地计时器，并严格关闭轮询（0次云端请求）
+            self._stop_app_countdown()
+            if self.update_interval is not None:
+                self.update_interval = None
+                _LOGGER.debug(
+                    "Hisense %s is idle/off/complete. Dynamic polling reset to None (zero cloud requests).",
+                    self.device_type,
+                )
+
+    def _check_washer_completion(self, status: dict[str, Any]) -> None:
+        """Trigger completion notification when cycle finishes."""
+        if self.device_type not in ("洗衣机", "干衣机", "洗碗机", "烤箱"):
+            return
+        is_running = bool(status.get("is_running") or status.get("machine_state") in ("running", "preheating"))
+        is_complete = (
+            status.get("machine_state") == "complete"
+            or status.get("run_status") in (4, 7)
+            or status.get("phase") in (4, 7)
+        )
+
+        if getattr(self, "_was_running", False) and is_complete:
+            self._was_running = False
+            dev_name = getattr(self.client, "device_name", self.device_type)
+            now_str = dt_util.now().strftime("%Y-%m-%d %H:%M:%S")
+            action_desc = {
+                "洗衣机": "洗涤",
+                "干衣机": "烘干",
+                "洗碗机": "洗碗",
+                "烤箱": "烹饪",
+            }.get(self.device_type, "运行")
+            event_type = {
+                "洗衣机": "washer",
+                "干衣机": "dryer",
+                "洗碗机": "dishwasher",
+                "烤箱": "oven",
+            }.get(self.device_type, "device")
+            self.hass.bus.async_fire(
+                f"hisense_{event_type}_complete",
+                {
+                    "device_id": str(self.client.device_id),
+                    "device_name": dev_name,
+                    "status": "complete",
+                    "timestamp": now_str,
+                },
+            )
+            from homeassistant.components import persistent_notification
+
+            persistent_notification.async_create(
+                self.hass,
+                f"【{dev_name}】{action_desc}完成！\n时间：{now_str}",
+                title=f"海信智慧家 - {self.device_type}完成提醒",
+                notification_id=f"hisense_{event_type}_complete_{self.client.device_id}",
+            )
+        elif is_running:
+            self._was_running = True
+        elif is_complete:
+            pass
+        else:
+            self._was_running = False
+
     def async_update_from_client(self) -> None:
         """Push optimistic control state, then read after the cloud settles."""
         self.async_set_updated_data(self.client.get_status())
         self.async_start_refresh(delay=_CONTROL_REFRESH_DELAY)
 
     async def async_cancel_refresh(self) -> None:
-        """Stop delayed retries when the integration unloads."""
+        """Stop delayed retries and countdown timer when the integration unloads."""
+        self._stop_app_countdown()
         task = self._refresh_task
         if task and not task.done():
             task.cancel()

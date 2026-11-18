@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "海信智能设备",
-        "description": "使用海信爱家的手机号和密码登录",
+        "description": "使用海信爱家的手机号和密码登录（推荐使用【家庭成员共享】的副账号，0抓包彻底避免与手机App互踢）",
         "data": {
           "username": "海信爱家登录用户手机号",
           "password": "如果没有登录密码请先去海信爱家App里设置一个"
@@ -36,6 +36,22 @@
     },
     "title": "海信智能设备"
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "海信家电运行选项",
+        "description": "配置家电云端同步选项。为避免请求过频导致云端封号，待机状态完全不轮询（0次请求），洗涤中轮询间隔强制限制不得小于 5 分钟，热水器/冰箱的 60 秒轮询补偿默认关闭（完全由 MQTT 实时推送与操作回读驱动）。",
+        "data": {
+          "enable_washer_dynamic_poll": "开启洗衣中动态轮询同步（默认关闭，保持 App 级本地倒计时与 MQTT 纯事件驱动）",
+          "washer_poll_interval": "洗衣中轮询同步间隔（分钟，最低强制限制为 5 分钟）",
+          "enable_periodic_poll": "开启 60 秒定时轮询补偿（热水器/冰箱/酒柜，默认关闭以防封号，依赖 MQTT 实时推送）"
+        }
+      }
+    },
+    "error": {
+      "interval_too_low": "轮询间隔过短！为防止被海信云端风控封号，轮询间隔强制不得低于 5 分钟。"
+    }
+  },
   "device": {
     "hisense_ac": {
       "name": "海信空调"
@@ -48,9 +64,41 @@
     },
     "hisense_dryer": {
       "name": "海信干衣机"
+    },
+    "hisense_tv": {
+      "name": "海信电视"
+    },
+    "hisense_oven": {
+      "name": "海信蒸烤箱"
+    },
+    "hisense_dishwasher": {
+      "name": "海信洗碗机"
+    },
+    "hisense_water_heater": {
+      "name": "海信热水器"
+    },
+    "hisense_hood": {
+      "name": "海信油烟机"
+    },
+    "hisense_stove": {
+      "name": "海信燃气灶"
+    },
+    "hisense_dehumidifier": {
+      "name": "海信除湿机"
+    },
+    "hisense_fresh_air": {
+      "name": "海信新风系统"
+    },
+    "hisense_wine_cabinet": {
+      "name": "海信酒柜"
     }
   },
   "entity": {
+    "water_heater": {
+      "water_heater": {
+        "name": "热水器"
+      }
+    },
     "climate": {
       "thermostat": {
         "name": "空调"
@@ -83,11 +131,152 @@
       },
       "fridge_quiet_mode": {
         "name": "智能降噪"
+      },
+      "washer_power": {
+        "name": "电源"
+      },
+      "washer_start_pause": {
+        "name": "启动/暂停"
+      },
+      "washer_child_lock": {
+        "name": "童锁"
+      },
+      "washer_softbaking": {
+        "name": "低温烘"
+      },
+      "ac_vertical_swing": {
+        "name": "上下摆风"
+      },
+      "ac_horizontal_swing": {
+        "name": "左右摆风"
+      },
+      "ac_ai_eco": {
+        "name": "AI节能"
+      },
+      "ac_clear": {
+        "name": "自清洁"
+      },
+      "ac_prev_direct_blow": {
+        "name": "防直吹"
+      },
+      "dryer_power": {
+        "name": "电源"
+      },
+      "dryer_start_pause": {
+        "name": "启动/暂停"
+      },
+      "dryer_child_lock": {
+        "name": "童锁"
+      },
+      "fridge_keep_fresh": {
+        "name": "保鲜模式"
+      },
+      "fridge_party": {
+        "name": "聚会模式"
+      },
+      "fridge_power_saving": {
+        "name": "节能模式"
+      },
+      "fridge_quick_frozen": {
+        "name": "速冻模式"
+      },
+      "fridge_quick_deep_frozen": {
+        "name": "深冷急冻模式"
+      },
+      "fridge_ion_fresh": {
+        "name": "离子净味保鲜"
+      },
+      "fridge_variation_power": {
+        "name": "变温室启闭"
+      },
+      "oven_power": {
+        "name": "蒸烤箱电源"
+      },
+      "oven_start_pause": {
+        "name": "蒸烤箱启动/暂停"
+      },
+      "oven_child_lock": {
+        "name": "蒸烤箱童锁"
+      },
+      "dishwasher_power": {
+        "name": "洗碗机电源"
+      },
+      "dishwasher_start_pause": {
+        "name": "洗碗机启动/暂停"
+      },
+      "dishwasher_child_lock": {
+        "name": "洗碗机童锁"
+      },
+      "water_heater_power": {
+        "name": "热水器电源"
+      },
+      "hood_power": {
+        "name": "油烟机电源"
+      },
+      "hood_light": {
+        "name": "油烟机照明"
+      },
+      "hood_delay_off": {
+        "name": "油烟机延时关机"
+      },
+      "dehumidifier_power": {
+        "name": "除湿机电源"
+      },
+      "dehumidifier_child_lock": {
+        "name": "除湿机童锁"
+      },
+      "fresh_air_power": {
+        "name": "新风系统电源"
+      },
+      "wine_cabinet_power": {
+        "name": "酒柜电源"
+      },
+      "wine_cabinet_light": {
+        "name": "酒柜照明"
       }
     },
     "button": {
       "force_update": {
         "name": "刷新状态"
+      },
+      "tv_key_power": {
+        "name": "电源"
+      },
+      "tv_key_home": {
+        "name": "主页"
+      },
+      "tv_key_back": {
+        "name": "返回"
+      },
+      "tv_key_menu": {
+        "name": "菜单"
+      },
+      "tv_key_ok": {
+        "name": "确认"
+      },
+      "tv_key_up": {
+        "name": "上"
+      },
+      "tv_key_down": {
+        "name": "下"
+      },
+      "tv_key_left": {
+        "name": "左"
+      },
+      "tv_key_right": {
+        "name": "右"
+      },
+      "tv_key_volume_up": {
+        "name": "音量加"
+      },
+      "tv_key_volume_down": {
+        "name": "音量减"
+      },
+      "tv_key_mute": {
+        "name": "静音"
+      },
+      "tv_key_control_center": {
+        "name": "控制中心"
       }
     },
     "number": {
@@ -102,6 +291,24 @@
       },
       "fridge_freezer_target_temperature": {
         "name": "温度设定-冷冻室"
+      },
+      "oven_target_temperature": {
+        "name": "蒸烤箱温度设定"
+      },
+      "oven_cook_time": {
+        "name": "蒸烤箱烹饪时长设定"
+      },
+      "water_heater_target_temperature": {
+        "name": "热水器温度设定"
+      },
+      "dehumidifier_target_humidity": {
+        "name": "除湿机湿度设定"
+      },
+      "wine_cabinet_zone1_target_temperature": {
+        "name": "酒柜上温区温度设定"
+      },
+      "wine_cabinet_zone2_target_temperature": {
+        "name": "酒柜下温区温度设定"
       }
     },
     "select": {
@@ -125,6 +332,70 @@
           "冰鲜": "冰鲜",
           "零度": "零度"
         }
+      },
+      "washer_program_select": {
+        "name": "洗衣程序"
+      },
+      "washer_detergent_select": {
+        "name": "洗衣液投放量"
+      },
+      "washer_soften_select": {
+        "name": "柔顺剂投放量"
+      },
+      "washer_spin_select": {
+        "name": "脱水转速"
+      },
+      "washer_temperature_select": {
+        "name": "洗涤水温"
+      },
+      "washer_rinse_select": {
+        "name": "漂洗次数"
+      },
+      "washer_wash_time_select": {
+        "name": "洗涤时间"
+      },
+      "washer_dry_select": {
+        "name": "烘干设定",
+        "state": {
+          "关闭": "关闭",
+          "即穿": "即穿",
+          "即熨": "即熨",
+          "即存": "即存",
+          "定时30分": "定时30分",
+          "定时1小时": "定时1小时",
+          "定时1.5小时": "定时1.5小时",
+          "定时2小时": "定时2小时",
+          "定时3小时": "定时3小时",
+          "定时4小时": "定时4小时"
+        }
+      },
+      "washer_softbaking_select": {
+        "name": "低温烘",
+        "state": {
+          "关闭": "关闭",
+          "开启": "开启"
+        }
+      },
+      "dryer_program_select": {
+        "name": "烘干程序"
+      },
+      "oven_mode_select": {
+        "name": "蒸烤箱烹饪模式"
+      },
+      "dishwasher_program_select": {
+        "name": "洗碗机洗涤程序"
+      },
+      "hood_speed_select": {
+        "name": "油烟机风速调节"
+      },
+      "dehumidifier_mode_select": {
+        "name": "除湿机工作模式"
+      },
+      "fresh_air_mode_select": {
+        "name": "新风系统工作模式"
+      },
+      "water_heater_mode": {
+        "name": "热水器工作模式"
       }
     },
     "sensor": {
@@ -145,6 +416,9 @@
       },
       "run_time": {
         "name": "今日运行时间"
+      },
+      "last_push_message": {
+        "name": "最新推送内容"
       },
       "washer_protocol_debug": {
         "name": "洗衣机协议状态"
@@ -209,15 +483,24 @@
         "state": {
           "off": "关闭",
           "ready_to_wear": "即穿",
-          "ironing": "熨烫",
-          "storage": "存放",
-          "timed_dry_level_1": "定时烘 1 挡",
-          "timed_dry_level_2": "定时烘 2 挡",
-          "timed_dry_level_3": "定时烘 3 挡",
-          "timed_dry_level_4": "定时烘 4 挡",
-          "timed_dry_level_5": "定时烘 5 挡",
-          "timed_dry_level_6": "定时烘 6 挡"
+          "ironing": "即熨",
+          "storage": "即存",
+          "timed_30m": "定时30分",
+          "timed_1h": "定时1小时",
+          "timed_1_5h": "定时1.5小时",
+          "timed_2h": "定时2小时",
+          "timed_3h": "定时3小时",
+          "timed_4h": "定时4小时",
+          "timed_dry_level_1": "定时30分",
+          "timed_dry_level_2": "定时1小时",
+          "timed_dry_level_3": "定时1.5小时",
+          "timed_dry_level_4": "定时2小时",
+          "timed_dry_level_5": "定时3小时",
+          "timed_dry_level_6": "定时4小时"
         }
+      },
+      "washer_wash_time": {
+        "name": "洗涤时间"
       },
       "dryer_run_state": {
         "name": "运行状态",
@@ -258,6 +541,105 @@
       },
       "fridge_data_updated": {
         "name": "上次数据更新时间"
+      },
+      "ac_humidity": {
+        "name": "室内湿度"
+      },
+      "tv_volume": {
+        "name": "音量"
+      },
+      "tv_source": {
+        "name": "信号源"
+      },
+      "tv_last_key": {
+        "name": "最近按键"
+      },
+      "oven_real_temperature": {
+        "name": "蒸烤箱实测温度"
+      },
+      "oven_target_temperature": {
+        "name": "蒸烤箱目标温度"
+      },
+      "oven_cook_time": {
+        "name": "蒸烤箱烹饪时长"
+      },
+      "oven_remaining_minutes": {
+        "name": "蒸烤箱剩余时间"
+      },
+      "oven_probe_temperature": {
+        "name": "蒸烤箱探针温度"
+      },
+      "oven_run_status": {
+        "name": "蒸烤箱运行状态"
+      },
+      "oven_work_mode": {
+        "name": "蒸烤箱烹饪模式"
+      },
+      "dishwasher_phase": {
+        "name": "洗碗机当前阶段"
+      },
+      "dishwasher_work_mode": {
+        "name": "洗碗机洗涤程序"
+      },
+      "dishwasher_remaining_minutes": {
+        "name": "洗碗机剩余时间"
+      },
+      "water_heater_real_temperature": {
+        "name": "热水器当前水温"
+      },
+      "water_heater_target_temperature": {
+        "name": "热水器目标水温"
+      },
+      "water_heater_hot_water_quantity": {
+        "name": "热水器剩余水量"
+      },
+      "hood_fan_speed": {
+        "name": "油烟机风速挡位"
+      },
+      "hood_delay_off_remain_time": {
+        "name": "油烟机延时关机倒计时"
+      },
+      "stove_left_fire_power": {
+        "name": "燃气灶左灶火力"
+      },
+      "stove_right_fire_power": {
+        "name": "燃气灶右灶火力"
+      },
+      "stove_left_timer": {
+        "name": "燃气灶左灶定时"
+      },
+      "stove_right_timer": {
+        "name": "燃气灶右灶定时"
+      },
+      "dehumidifier_real_humidity": {
+        "name": "除湿机当前环境湿度"
+      },
+      "dehumidifier_target_humidity": {
+        "name": "除湿机目标湿度"
+      },
+      "dehumidifier_work_mode": {
+        "name": "除湿机工作模式"
+      },
+      "fresh_air_fan_speed": {
+        "name": "新风系统风速"
+      },
+      "fresh_air_work_mode": {
+        "name": "新风系统工作模式"
+      },
+      "wine_cabinet_zone1_real_temperature": {
+        "name": "酒柜上温区实测温度"
+      },
+      "wine_cabinet_zone1_target_temperature": {
+        "name": "酒柜上温区目标温度"
+      },
+      "wine_cabinet_zone2_real_temperature": {
+        "name": "酒柜下温区实测温度"
+      },
+      "wine_cabinet_zone2_target_temperature": {
+        "name": "酒柜下温区目标温度"
+      },
+      "wine_cabinet_humidity": {
+        "name": "酒柜实测湿度"
       }
     },
     "binary_sensor": {
@@ -318,6 +700,15 @@
       "washer_child_lock": {
         "name": "童锁"
       },
+      "washer_detergent_lack": {
+        "name": "洗涤剂不足"
+      },
+      "washer_softener_lack": {
+        "name": "柔顺剂不足"
+      },
+      "washer_softbaking": {
+        "name": "低温烘"
+      },
       "dryer_power": {
         "name": "电源"
       },
@@ -338,6 +729,44 @@
       },
       "fridge_cleaner": {
         "name": "净味"
+      },
+      "oven_power": {
+        "name": "蒸烤箱电源状态"
+      },
+      "oven_door_open": {
+        "name": "蒸烤箱门状态"
+      },
+      "oven_water_box_lack": {
+        "name": "蒸烤箱水箱缺水告警"
+      },
+      "dishwasher_power": {
+        "name": "洗碗机电源状态"
+      },
+      "dishwasher_door_open": {
+        "name": "洗碗机门状态"
+      },
+      "dishwasher_salt_lack": {
+        "name": "洗碗机缺软水盐告警"
+      },
+      "dishwasher_rinse_aid_lack": {
+        "name": "洗碗机缺光亮剂告警"
+      },
+      "water_heater_power": {
+        "name": "热水器电源状态"
+      },
+      "water_heater_heating": {
+        "name": "热水器加热状态"
+      },
+      "dehumidifier_power": {
+        "name": "除湿机电源状态"
+      },
+      "dehumidifier_water_full": {
+        "name": "除湿机水箱已满告警"
+      }
+    },
+    "media_player": {
+      "tv_media_player": {
+        "name": "电视"
       }
     }
   }

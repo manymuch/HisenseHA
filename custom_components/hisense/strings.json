@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "HiSense Smart Device",
-        "description": "Login with App username and password",
+        "description": "Sign in with your Hisense AIHome username and password (recommended: use a shared family sub-account to prevent MQTT session collisions with the mobile app)",
         "data": {
           "username": "App login username, could be the phone number",
           "password": "App login password, if not available set it in the app first"
@@ -36,6 +36,22 @@
     },
     "title": "Hisense Smart Device"
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Hisense Appliance Settings",
+        "description": "Configure cloud polling options. To prevent account bans from excessive requests, standby is strictly zero-polling, wash-time dynamic polling is enforced to be at least 5 minutes, and 60s periodic compensation for water heater/fridge is disabled by default (relying on real-time MQTT push).",
+        "data": {
+          "enable_washer_dynamic_poll": "Enable dynamic cloud polling during washing (default disabled, pure local countdown & MQTT)",
+          "washer_poll_interval": "Dynamic polling interval while washing (minutes, minimum 5 minutes)",
+          "enable_periodic_poll": "Enable 60s periodic polling compensation for water heater / fridge (default disabled to prevent bans)"
+        }
+      }
+    },
+    "error": {
+      "interval_too_low": "Polling interval must be at least 5 minutes to prevent account bans."
+    }
+  },
   "device": {
     "hisense_ac": {
       "name": "Hisense AC"
@@ -48,9 +64,41 @@
     },
     "hisense_dryer": {
       "name": "Hisense Dryer"
+    },
+    "hisense_tv": {
+      "name": "Hisense TV"
+    },
+    "hisense_oven": {
+      "name": "Hisense Oven"
+    },
+    "hisense_dishwasher": {
+      "name": "Hisense Dishwasher"
+    },
+    "hisense_water_heater": {
+      "name": "Hisense Water Heater"
+    },
+    "hisense_hood": {
+      "name": "Hisense Hood"
+    },
+    "hisense_stove": {
+      "name": "Hisense Gas Stove"
+    },
+    "hisense_dehumidifier": {
+      "name": "Hisense Dehumidifier"
+    },
+    "hisense_fresh_air": {
+      "name": "Hisense Fresh Air"
+    },
+    "hisense_wine_cabinet": {
+      "name": "Hisense Wine Cabinet"
     }
   },
   "entity": {
+    "water_heater": {
+      "water_heater": {
+        "name": "Water Heater"
+      }
+    },
     "climate": {
       "thermostat": {
         "name": "Climate"
@@ -83,11 +131,143 @@
       },
       "fridge_quiet_mode": {
         "name": "Smart noise reduction"
+      },
+      "washer_softbaking": {
+        "name": "Softbaking"
+      },
+      "ac_vertical_swing": {
+        "name": "Vertical swing"
+      },
+      "ac_horizontal_swing": {
+        "name": "Horizontal swing"
+      },
+      "ac_ai_eco": {
+        "name": "AI Eco mode"
+      },
+      "ac_clear": {
+        "name": "Self clean"
+      },
+      "ac_prev_direct_blow": {
+        "name": "Anti direct blow"
+      },
+      "dryer_power": {
+        "name": "Power"
+      },
+      "dryer_start_pause": {
+        "name": "Start / Pause"
+      },
+      "dryer_child_lock": {
+        "name": "Child lock"
+      },
+      "fridge_keep_fresh": {
+        "name": "Keep fresh mode"
+      },
+      "fridge_party": {
+        "name": "Party mode"
+      },
+      "fridge_power_saving": {
+        "name": "Power saving mode"
+      },
+      "fridge_quick_frozen": {
+        "name": "Quick frozen mode"
+      },
+      "fridge_quick_deep_frozen": {
+        "name": "Quick deep frozen mode"
+      },
+      "fridge_ion_fresh": {
+        "name": "Ion fresh"
+      },
+      "fridge_variation_power": {
+        "name": "Variation zone switch"
+      },
+      "oven_power": {
+        "name": "Oven Power"
+      },
+      "oven_start_pause": {
+        "name": "Oven Start/Pause"
+      },
+      "oven_child_lock": {
+        "name": "Oven Child Lock"
+      },
+      "dishwasher_power": {
+        "name": "Dishwasher Power"
+      },
+      "dishwasher_start_pause": {
+        "name": "Dishwasher Start/Pause"
+      },
+      "dishwasher_child_lock": {
+        "name": "Dishwasher Child Lock"
+      },
+      "water_heater_power": {
+        "name": "Water Heater Power"
+      },
+      "hood_power": {
+        "name": "Hood Power"
+      },
+      "hood_light": {
+        "name": "Hood Light"
+      },
+      "hood_delay_off": {
+        "name": "Hood Delay Off"
+      },
+      "dehumidifier_power": {
+        "name": "Dehumidifier Power"
+      },
+      "dehumidifier_child_lock": {
+        "name": "Dehumidifier Child Lock"
+      },
+      "fresh_air_power": {
+        "name": "Fresh Air Power"
+      },
+      "wine_cabinet_power": {
+        "name": "Wine Cabinet Power"
+      },
+      "wine_cabinet_light": {
+        "name": "Wine Cabinet Light"
       }
     },
     "button": {
       "force_update": {
         "name": "Force refresh"
+      },
+      "tv_key_power": {
+        "name": "TV Power"
+      },
+      "tv_key_home": {
+        "name": "TV Home"
+      },
+      "tv_key_back": {
+        "name": "TV Back"
+      },
+      "tv_key_menu": {
+        "name": "TV Menu"
+      },
+      "tv_key_ok": {
+        "name": "TV OK"
+      },
+      "tv_key_up": {
+        "name": "TV Up"
+      },
+      "tv_key_down": {
+        "name": "TV Down"
+      },
+      "tv_key_left": {
+        "name": "TV Left"
+      },
+      "tv_key_right": {
+        "name": "TV Right"
+      },
+      "tv_key_volume_up": {
+        "name": "TV Volume Up"
+      },
+      "tv_key_volume_down": {
+        "name": "TV Volume Down"
+      },
+      "tv_key_mute": {
+        "name": "TV Mute"
+      },
+      "tv_key_control_center": {
+        "name": "TV Control Center"
       }
     },
     "number": {
@@ -102,6 +282,24 @@
       },
       "fridge_freezer_target_temperature": {
         "name": "Set temperature - Freezer"
+      },
+      "oven_target_temperature": {
+        "name": "Oven Target Temperature"
+      },
+      "oven_cook_time": {
+        "name": "Oven Cook Time"
+      },
+      "water_heater_target_temperature": {
+        "name": "Water Heater Target Temperature"
+      },
+      "dehumidifier_target_humidity": {
+        "name": "Dehumidifier Target Humidity"
+      },
+      "wine_cabinet_zone1_target_temperature": {
+        "name": "Wine Cabinet Zone 1 Target Temperature"
+      },
+      "wine_cabinet_zone2_target_temperature": {
+        "name": "Wine Cabinet Zone 2 Target Temperature"
       }
     },
     "select": {
@@ -125,6 +323,70 @@
           "冰鲜": "Chilled",
           "零度": "Zero degree"
         }
+      },
+      "washer_program_select": {
+        "name": "Wash Program"
+      },
+      "washer_detergent_select": {
+        "name": "Detergent Dosage"
+      },
+      "washer_soften_select": {
+        "name": "Softener Dosage"
+      },
+      "washer_temperature_select": {
+        "name": "Wash Temperature"
+      },
+      "washer_wash_time_select": {
+        "name": "Wash Time"
+      },
+      "washer_rinse_select": {
+        "name": "Rinse Count"
+      },
+      "washer_spin_select": {
+        "name": "Spin Speed"
+      },
+      "washer_dry_select": {
+        "name": "Drying Mode",
+        "state": {
+          "关闭": "Off",
+          "即穿": "Ready to wear",
+          "即熨": "Ironing",
+          "即存": "Storage",
+          "定时30分": "30 minutes",
+          "定时1小时": "1 hour",
+          "定时1.5小时": "1.5 hours",
+          "定时2小时": "2 hours",
+          "定时3小时": "3 hours",
+          "定时4小时": "4 hours"
+        }
+      },
+      "washer_softbaking_select": {
+        "name": "Low-Temp Drying",
+        "state": {
+          "关闭": "Off",
+          "开启": "On"
+        }
+      },
+      "dryer_program_select": {
+        "name": "Dryer Program"
+      },
+      "oven_mode_select": {
+        "name": "Oven Mode"
+      },
+      "dishwasher_program_select": {
+        "name": "Dishwasher Program"
+      },
+      "hood_speed_select": {
+        "name": "Hood Speed"
+      },
+      "dehumidifier_mode_select": {
+        "name": "Dehumidifier Mode"
+      },
+      "fresh_air_mode_select": {
+        "name": "Fresh Air Mode"
+      },
+      "water_heater_mode": {
+        "name": "Water Heater Mode"
       }
     },
     "sensor": {
@@ -216,8 +478,17 @@
           "timed_dry_level_3": "Timed dry level 3",
           "timed_dry_level_4": "Timed dry level 4",
           "timed_dry_level_5": "Timed dry level 5",
-          "timed_dry_level_6": "Timed dry level 6"
+          "timed_dry_level_6": "Timed dry level 6",
+          "timed_30m": "30 minutes",
+          "timed_1h": "1 hour",
+          "timed_1_5h": "1.5 hours",
+          "timed_2h": "2 hours",
+          "timed_3h": "3 hours",
+          "timed_4h": "4 hours"
         }
+      },
+      "washer_wash_time": {
+        "name": "Wash Time"
       },
       "dryer_run_state": {
         "name": "Run state",
@@ -258,6 +529,105 @@
       },
       "fridge_data_updated": {
         "name": "Last data update"
+      },
+      "ac_humidity": {
+        "name": "Indoor humidity"
+      },
+      "tv_volume": {
+        "name": "Volume"
+      },
+      "tv_source": {
+        "name": "Input source"
+      },
+      "tv_last_key": {
+        "name": "Last key"
+      },
+      "oven_real_temperature": {
+        "name": "Oven Real Temperature"
+      },
+      "oven_target_temperature": {
+        "name": "Oven Target Temperature"
+      },
+      "oven_cook_time": {
+        "name": "Oven Cook Time"
+      },
+      "oven_remaining_minutes": {
+        "name": "Oven Remaining Time"
+      },
+      "oven_probe_temperature": {
+        "name": "Oven Probe Temperature"
+      },
+      "oven_run_status": {
+        "name": "Oven Run Status"
+      },
+      "oven_work_mode": {
+        "name": "Oven Work Mode"
+      },
+      "dishwasher_phase": {
+        "name": "Dishwasher Phase"
+      },
+      "dishwasher_work_mode": {
+        "name": "Dishwasher Program"
+      },
+      "dishwasher_remaining_minutes": {
+        "name": "Dishwasher Remaining Time"
+      },
+      "water_heater_real_temperature": {
+        "name": "Water Heater Real Temperature"
+      },
+      "water_heater_target_temperature": {
+        "name": "Water Heater Target Temperature"
+      },
+      "water_heater_hot_water_quantity": {
+        "name": "Water Heater Hot Water Quantity"
+      },
+      "hood_fan_speed": {
+        "name": "Hood Fan Speed"
+      },
+      "hood_delay_off_remain_time": {
+        "name": "Hood Delay Off Remaining Time"
+      },
+      "stove_left_fire_power": {
+        "name": "Stove Left Fire Power"
+      },
+      "stove_right_fire_power": {
+        "name": "Stove Right Fire Power"
+      },
+      "stove_left_timer": {
+        "name": "Stove Left Timer"
+      },
+      "stove_right_timer": {
+        "name": "Stove Right Timer"
+      },
+      "dehumidifier_real_humidity": {
+        "name": "Dehumidifier Real Humidity"
+      },
+      "dehumidifier_target_humidity": {
+        "name": "Dehumidifier Target Humidity"
+      },
+      "dehumidifier_work_mode": {
+        "name": "Dehumidifier Work Mode"
+      },
+      "fresh_air_fan_speed": {
+        "name": "Fresh Air Fan Speed"
+      },
+      "fresh_air_work_mode": {
+        "name": "Fresh Air Work Mode"
+      },
+      "wine_cabinet_zone1_real_temperature": {
+        "name": "Wine Cabinet Zone 1 Real Temperature"
+      },
+      "wine_cabinet_zone1_target_temperature": {
+        "name": "Wine Cabinet Zone 1 Target Temperature"
+      },
+      "wine_cabinet_zone2_real_temperature": {
+        "name": "Wine Cabinet Zone 2 Real Temperature"
+      },
+      "wine_cabinet_zone2_target_temperature": {
+        "name": "Wine Cabinet Zone 2 Target Temperature"
+      },
+      "wine_cabinet_humidity": {
+        "name": "Wine Cabinet Humidity"
       }
     },
     "binary_sensor": {
@@ -318,6 +688,12 @@
       "washer_child_lock": {
         "name": "Child lock"
       },
+      "washer_detergent_lack": {
+        "name": "Detergent Empty"
+      },
+      "washer_softener_lack": {
+        "name": "Softener Empty"
+      },
       "dryer_power": {
         "name": "Power"
       },
@@ -338,6 +714,44 @@
       },
       "fridge_cleaner": {
         "name": "Odor removal"
+      },
+      "oven_power": {
+        "name": "Oven Power"
+      },
+      "oven_door_open": {
+        "name": "Oven Door"
+      },
+      "oven_water_box_lack": {
+        "name": "Oven Water Box Empty"
+      },
+      "dishwasher_power": {
+        "name": "Dishwasher Power"
+      },
+      "dishwasher_door_open": {
+        "name": "Dishwasher Door"
+      },
+      "dishwasher_salt_lack": {
+        "name": "Dishwasher Salt Lack"
+      },
+      "dishwasher_rinse_aid_lack": {
+        "name": "Dishwasher Rinse Aid Lack"
+      },
+      "water_heater_power": {
+        "name": "Water Heater Power"
+      },
+      "water_heater_heating": {
+        "name": "Water Heater Heating"
+      },
+      "dehumidifier_power": {
+        "name": "Dehumidifier Power"
+      },
+      "dehumidifier_water_full": {
+        "name": "Dehumidifier Water Full"
+      }
+    },
+    "media_player": {
+      "tv_media_player": {
+        "name": "TV"
       }
     }
   }

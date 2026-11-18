@@ -1,14 +1,29 @@
 import voluptuous as vol
-from homeassistant import config_entries
+from homeassistant import config_entries, core
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.selector import TextSelector, TextSelectorConfig, TextSelectorType
-from .const import DOMAIN, CONF_USERNAME, CONF_PASSWORD
+from .const import (
+    DOMAIN,
+    CONF_USERNAME,
+    CONF_PASSWORD,
+    CONF_ENABLE_WASHER_POLL,
+    CONF_WASHER_POLL_INTERVAL,
+    DEFAULT_ENABLE_WASHER_POLL,
+    DEFAULT_WASHER_POLL_INTERVAL,
+    MIN_WASHER_POLL_INTERVAL,
+    CONF_ENABLE_PERIODIC_POLL,
+    DEFAULT_ENABLE_PERIODIC_POLL,
+)
 from .pyhisenseapi import HiSenseLogin
 
 class HisenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
-    CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
+
+    @staticmethod
+    @core.callback
+    def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> config_entries.OptionsFlow:
+        return HisenseOptionsFlowHandler(config_entry)
 
     def __init__(self):
         self._home_options = None
@@ -38,6 +53,8 @@ class HisenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     errors["base"] = "invalid_auth"
                 else:
                     access_token, refresh_token, customer_id = token_pair
+                    await self.async_set_unique_id(str(customer_id))
+                    self._abort_if_unique_id_configured()
                     try:
                         self._home_options = await hisense_login.get_home_select_options(
                             access_token, customer_id
@@ -218,3 +235,52 @@ class HisenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
             errors=errors,
         )
+
+
+class HisenseOptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle options for Hisense integration."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry | None = None) -> None:
+        """Initialize options flow."""
+        self._config_entry = config_entry
+
+    @property
+    def _entry(self) -> config_entries.ConfigEntry | None:
+        if getattr(self, "_config_entry", None) is not None:
+            return self._config_entry
+        try:
+            return self.config_entry
+        except Exception:
+            return None
+
+    async def async_step_init(self, user_input=None):
+        """Manage the options."""
+        errors = {}
+        if user_input is not None:
+            # 强制设定轮询间隔不得小于5分钟
+            interval = user_input.get(CONF_WASHER_POLL_INTERVAL, DEFAULT_WASHER_POLL_INTERVAL)
+            if interval < MIN_WASHER_POLL_INTERVAL:
+                errors[CONF_WASHER_POLL_INTERVAL] = "interval_too_low"
+            else:
+                return self.async_create_entry(title="", data=user_input)
+
+        entry = self._entry
+        options = entry.options if entry else {}
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_ENABLE_WASHER_POLL,
+                    default=options.get(CONF_ENABLE_WASHER_POLL, DEFAULT_ENABLE_WASHER_POLL),
+                ): bool,
+                vol.Required(
+                    CONF_WASHER_POLL_INTERVAL,
+                    default=options.get(CONF_WASHER_POLL_INTERVAL, DEFAULT_WASHER_POLL_INTERVAL),
+                ): vol.All(vol.Coerce(int), vol.Range(min=MIN_WASHER_POLL_INTERVAL)),
+                vol.Required(
+                    CONF_ENABLE_PERIODIC_POLL,
+                    default=options.get(CONF_ENABLE_PERIODIC_POLL, DEFAULT_ENABLE_PERIODIC_POLL),
+                ): bool,
+            }
+        )
+        return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
+
