@@ -238,8 +238,18 @@ class HisenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 class HisenseOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle options for Hisense integration."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
+    def __init__(self, config_entry: config_entries.ConfigEntry | None = None) -> None:
+        """Initialize options flow."""
+        self._config_entry = config_entry
+
+    @property
+    def _entry(self) -> config_entries.ConfigEntry | None:
+        if getattr(self, "_config_entry", None) is not None:
+            return self._config_entry
+        try:
+            return self.config_entry
+        except Exception:
+            return None
 
     async def async_step_init(self, user_input=None):
         """Manage the options."""
@@ -252,7 +262,8 @@ class HisenseOptionsFlowHandler(config_entries.OptionsFlow):
             else:
                 return self.async_create_entry(title="", data=user_input)
 
-        options = self.config_entry.options
+        entry = self._entry
+        options = entry.options if entry else {}
         schema = vol.Schema(
             {
                 vol.Required(
