@@ -63,6 +63,9 @@
     },
     "hisense_dryer": {
       "name": "Hisense Dryer"
+    },
+    "hisense_tv": {
+      "name": "Hisense TV"
     }
   },
   "entity": {
@@ -101,11 +104,95 @@
       },
       "washer_softbaking": {
         "name": "Softbaking"
+      },
+      "ac_vertical_swing": {
+        "name": "Vertical swing"
+      },
+      "ac_horizontal_swing": {
+        "name": "Horizontal swing"
+      },
+      "ac_ai_eco": {
+        "name": "AI Eco mode"
+      },
+      "ac_clear": {
+        "name": "Self clean"
+      },
+      "ac_prev_direct_blow": {
+        "name": "Anti direct blow"
+      },
+      "dryer_power": {
+        "name": "Power"
+      },
+      "dryer_start_pause": {
+        "name": "Start / Pause"
+      },
+      "dryer_child_lock": {
+        "name": "Child lock"
+      },
+      "fridge_keep_fresh": {
+        "name": "Keep fresh mode"
+      },
+      "fridge_party": {
+        "name": "Party mode"
+      },
+      "fridge_power_saving": {
+        "name": "Power saving mode"
+      },
+      "fridge_quick_frozen": {
+        "name": "Quick frozen mode"
+      },
+      "fridge_quick_deep_frozen": {
+        "name": "Quick deep frozen mode"
+      },
+      "fridge_ion_fresh": {
+        "name": "Ion fresh"
+      },
+      "fridge_variation_power": {
+        "name": "Variation zone switch"
       }
     },
     "button": {
       "force_update": {
         "name": "Force refresh"
+      },
+      "tv_key_power": {
+        "name": "TV Power"
+      },
+      "tv_key_home": {
+        "name": "TV Home"
+      },
+      "tv_key_back": {
+        "name": "TV Back"
+      },
+      "tv_key_menu": {
+        "name": "TV Menu"
+      },
+      "tv_key_ok": {
+        "name": "TV OK"
+      },
+      "tv_key_up": {
+        "name": "TV Up"
+      },
+      "tv_key_down": {
+        "name": "TV Down"
+      },
+      "tv_key_left": {
+        "name": "TV Left"
+      },
+      "tv_key_right": {
+        "name": "TV Right"
+      },
+      "tv_key_volume_up": {
+        "name": "TV Volume Up"
+      },
+      "tv_key_volume_down": {
+        "name": "TV Volume Down"
+      },
+      "tv_key_mute": {
+        "name": "TV Mute"
+      },
+      "tv_key_control_center": {
+        "name": "TV Control Center"
       }
     },
     "number": {
@@ -186,6 +273,9 @@
           "关闭": "Off",
           "开启": "On"
         }
+      },
+      "dryer_program_select": {
+        "name": "Dryer Program"
       }
     },
     "sensor": {
@@ -328,6 +418,18 @@
       },
       "fridge_data_updated": {
         "name": "Last data update"
+      },
+      "ac_humidity": {
+        "name": "Indoor humidity"
+      },
+      "tv_volume": {
+        "name": "Volume"
+      },
+      "tv_source": {
+        "name": "Input source"
+      },
+      "tv_last_key": {
+        "name": "Last key"
       }
     },
     "binary_sensor": {
@@ -414,6 +516,11 @@
       },
       "fridge_cleaner": {
         "name": "Odor removal"
+      }
+    },
+    "media_player": {
+      "tv_media_player": {
+        "name": "TV"
       }
     }
   }

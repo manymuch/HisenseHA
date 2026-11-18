@@ -40,6 +40,20 @@ WASHER_WASH_TIME_OPTIONS = [
 ]
 WASHER_SOFTBAKING_OPTIONS = ["关闭", "开启"]
 
+DRYER_PROGRAM_MAP = {
+    "智能烘": 0,
+    "棉麻": 1,
+    "化纤": 2,
+    "羊毛": 5,
+    "羽绒": 6,
+    "空气洗": 8,
+    "热风烘": 10,
+    "冷风烘": 11,
+    "定时烘": 12,
+}
+DRYER_PROGRAM_REVERSE_MAP = {v: k for k, v in DRYER_PROGRAM_MAP.items()}
+DRYER_PROGRAM_OPTIONS = list(DRYER_PROGRAM_MAP.keys())
+
 
 #: 「自定义」= 退出正在运行的预设模式（下发 value="0"），不是只读展示值。
 CUSTOM_MODE = "自定义"
@@ -102,6 +116,12 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     ]
     if washer_entities:
         async_add_entities(washer_entities)
+
+    dryer_coordinators = [
+        c for c in coordinators.values() if c.device_type == "干衣机"
+    ]
+    if dryer_coordinators:
+        async_add_entities([HisenseDryerProgramSelect(c) for c in dryer_coordinators])
 
 
 class HisenseFridgeModeSelect(HisenseEntity, SelectEntity):
@@ -426,4 +446,34 @@ class HisenseWasherSoftbakingSelect(HisenseEntity, SelectEntity):
             self.coordinator.async_update_from_client()
             return
         raise HomeAssistantError(f"Failed to set softbaking to {option}")
+
+
+class HisenseDryerProgramSelect(HisenseEntity, SelectEntity):
+    _attr_translation_key = "dryer_program_select"
+    _attr_icon = "mdi:tumble-dryer"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "dryer_program_select", "dryer_program_select")
+        self._attr_options = DRYER_PROGRAM_OPTIONS
+
+    @property
+    def current_option(self):
+        val = self.status.get("program")
+        if val is None:
+            return None
+        return DRYER_PROGRAM_REVERSE_MAP.get(val, str(val))
+
+    async def async_select_option(self, option: str):
+        mode_id = DRYER_PROGRAM_MAP.get(option)
+        if mode_id is None:
+            if str(option).isdigit():
+                mode_id = int(option)
+            else:
+                raise HomeAssistantError(f"Unsupported dryer program: {option}")
+        if not self.status.get("power_on"):
+            raise HomeAssistantError("请先开启干衣机电源后再切换程序")
+        if await self.client.set_program(mode_id):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError(f"Failed to set dryer program to {option}")
 

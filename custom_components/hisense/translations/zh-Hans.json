@@ -63,6 +63,9 @@
     },
     "hisense_dryer": {
       "name": "海信干衣机"
+    },
+    "hisense_tv": {
+      "name": "海信电视"
     }
   },
   "entity": {
@@ -110,11 +113,95 @@
       },
       "washer_softbaking": {
         "name": "低温烘"
+      },
+      "ac_vertical_swing": {
+        "name": "上下摆风"
+      },
+      "ac_horizontal_swing": {
+        "name": "左右摆风"
+      },
+      "ac_ai_eco": {
+        "name": "AI节能"
+      },
+      "ac_clear": {
+        "name": "自清洁"
+      },
+      "ac_prev_direct_blow": {
+        "name": "防直吹"
+      },
+      "dryer_power": {
+        "name": "电源"
+      },
+      "dryer_start_pause": {
+        "name": "启动/暂停"
+      },
+      "dryer_child_lock": {
+        "name": "童锁"
+      },
+      "fridge_keep_fresh": {
+        "name": "保鲜模式"
+      },
+      "fridge_party": {
+        "name": "聚会模式"
+      },
+      "fridge_power_saving": {
+        "name": "节能模式"
+      },
+      "fridge_quick_frozen": {
+        "name": "速冻模式"
+      },
+      "fridge_quick_deep_frozen": {
+        "name": "深冷急冻模式"
+      },
+      "fridge_ion_fresh": {
+        "name": "离子净味保鲜"
+      },
+      "fridge_variation_power": {
+        "name": "变温室启闭"
       }
     },
     "button": {
       "force_update": {
         "name": "刷新状态"
+      },
+      "tv_key_power": {
+        "name": "电源"
+      },
+      "tv_key_home": {
+        "name": "主页"
+      },
+      "tv_key_back": {
+        "name": "返回"
+      },
+      "tv_key_menu": {
+        "name": "菜单"
+      },
+      "tv_key_ok": {
+        "name": "确认"
+      },
+      "tv_key_up": {
+        "name": "上"
+      },
+      "tv_key_down": {
+        "name": "下"
+      },
+      "tv_key_left": {
+        "name": "左"
+      },
+      "tv_key_right": {
+        "name": "右"
+      },
+      "tv_key_volume_up": {
+        "name": "音量加"
+      },
+      "tv_key_volume_down": {
+        "name": "音量减"
+      },
+      "tv_key_mute": {
+        "name": "静音"
+      },
+      "tv_key_control_center": {
+        "name": "控制中心"
       }
     },
     "number": {
@@ -195,6 +282,9 @@
           "关闭": "关闭",
           "开启": "开启"
         }
+      },
+      "dryer_program_select": {
+        "name": "烘干程序"
       }
     },
     "sensor": {
@@ -340,6 +430,18 @@
       },
       "fridge_data_updated": {
         "name": "上次数据更新时间"
+      },
+      "ac_humidity": {
+        "name": "室内湿度"
+      },
+      "tv_volume": {
+        "name": "音量"
+      },
+      "tv_source": {
+        "name": "信号源"
+      },
+      "tv_last_key": {
+        "name": "最近按键"
       }
     },
     "binary_sensor": {
@@ -429,6 +531,11 @@
       },
       "fridge_cleaner": {
         "name": "净味"
+      }
+    },
+    "media_player": {
+      "tv_media_player": {
+        "name": "电视"
       }
     }
   }

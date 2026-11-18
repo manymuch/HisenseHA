@@ -15,6 +15,7 @@ from .pyhisenseapi import (
     HiSenseAC,
     HiSenseDryer,
     HiSenseFridge,
+    HiSenseTV,
     HiSenseWasher,
     WASHER_PROGRAM_REVERSE_MAP,
     WASHER_DRY_REVERSE_MAP,
@@ -133,6 +134,23 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
                 on_token_refresh=save_tokens,
                 token_lock=token_lock,
             )
+        elif device_type == "电视":
+            client = HiSenseTV(
+                wifi_id=wifi_id,
+                device_id=device_id,
+                refresh_token=refresh_token,
+                session=session,
+                device_name=friendly_name,
+                entity_name=entity_name,
+                home_id=home_id,
+                access_token=access_token,
+                customer_id=customer_id,
+                partner_id=partner_id,
+                username=username,
+                password=password,
+                on_token_refresh=save_tokens,
+                token_lock=token_lock,
+            )
         else:
             client = HiSenseAC(
                 wifi_id=wifi_id,
@@ -207,19 +225,67 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
                     or str(dev_id) == target_device_id
                     or (target_device_id and (target_device_id in str(dev_id) or str(dev_id) in target_device_id))
                 ):
-                    # 1. 如果推送自带完整的设备状态字典，直接更新客户端内存状态
-                    if isinstance(raw_states, dict) and hasattr(coord.client, "_update_from_states"):
-                        coord.client._update_from_states(raw_states)
+                    # 1. 无论是完整状态 raw_states 还是增量变更 change_info，均更新客户端内存并刷新实体
+                    states_to_update = {}
+                    if isinstance(raw_states, dict):
+                        states_to_update.update(raw_states)
+                    if isinstance(change_info, dict):
+                        for k, v in change_info.items():
+                            states_to_update[k] = v[0] if isinstance(v, list) else v
+                    if states_to_update and hasattr(coord.client, "_update_from_states"):
+                        coord.client._update_from_states(states_to_update)
                         coord.async_set_updated_data(coord.client.get_status())
 
                     # 2. 格式化推送简述
                     summary_str = None
                     if isinstance(change_info, dict):
                         changes = []
-                        if "powerStatus" in change_info:
-                            p_val = change_info["powerStatus"]
+                        if "powerStatus" in change_info or "power" in change_info:
+                            p_val = change_info.get("powerStatus", change_info.get("power"))
                             p_curr = p_val[0] if isinstance(p_val, list) else p_val
                             changes.append("电源:开机" if str(p_curr) == "1" else "电源:关机")
+                        # 空调字段
+                        if "setTemperature" in change_info:
+                            t_val = change_info["setTemperature"]
+                            t_curr = t_val[0] if isinstance(t_val, list) else t_val
+                            changes.append(f"设定温度:{t_curr}℃")
+                        if "realTemperature" in change_info:
+                            t_val = change_info["realTemperature"]
+                            t_curr = t_val[0] if isinstance(t_val, list) else t_val
+                            changes.append(f"室温:{t_curr}℃")
+                        if "modes" in change_info:
+                            m_val = change_info["modes"]
+                            m_curr = m_val[0] if isinstance(m_val, list) else m_val
+                            m_name = {0: "送风", 1: "制热", 2: "制冷", 3: "除湿", 4: "自动"}.get(int(m_curr) if str(m_curr).isdigit() else m_curr, f"模式:{m_curr}")
+                            changes.append(f"模式:{m_name}")
+                        if "windSpeed" in change_info:
+                            w_val = change_info["windSpeed"]
+                            w_curr = w_val[0] if isinstance(w_val, list) else w_val
+                            w_name = {1: "微风", 2: "低风", 3: "中风", 4: "高风"}.get(int(w_curr) if str(w_curr).isdigit() else w_curr, f"风速:{w_curr}")
+                            changes.append(f"风速:{w_name}")
+                        # 冰箱字段
+                        if "refrigeratorSetTemperature" in change_info:
+                            t_val = change_info["refrigeratorSetTemperature"]
+                            t_curr = t_val[0] if isinstance(t_val, list) else t_val
+                            changes.append(f"冷藏:{t_curr}℃")
+                        if "freezeSetTemperature" in change_info:
+                            t_val = change_info["freezeSetTemperature"]
+                            t_curr = t_val[0] if isinstance(t_val, list) else t_val
+                            changes.append(f"冷冻:{t_curr}℃")
+                        if "dBDDegerming" in change_info:
+                            d_val = change_info["dBDDegerming"]
+                            d_curr = d_val[0] if isinstance(d_val, list) else d_val
+                            changes.append("除菌净味:开" if str(d_curr) == "1" else "除菌净味:关")
+                        # 电视字段
+                        if "volume" in change_info:
+                            v_val = change_info["volume"]
+                            v_curr = v_val[0] if isinstance(v_val, list) else v_val
+                            changes.append(f"音量:{v_curr}")
+                        if "mute" in change_info:
+                            m_val = change_info["mute"]
+                            m_curr = m_val[0] if isinstance(m_val, list) else m_val
+                            changes.append("静音:开" if str(m_curr) == "1" else "静音:关")
+                        # 洗衣机 / 干衣机字段
                         if "runStatus" in change_info:
                             r_val = change_info["runStatus"]
                             r_curr = r_val[0] if isinstance(r_val, list) else r_val
@@ -366,8 +432,8 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
                     if len(coord.push_history) > 30:
                         coord.push_history.pop(0)
 
-                    # 3. 洗衣机完成检测与专属通知
-                    dev_name = getattr(coord.client, "device_name", "海信洗衣机")
+                    # 3. 洗衣机 / 干衣机完成检测与专属通知
+                    dev_name = getattr(coord.client, "device_name", None) or ("海信干衣机" if coord.device_type == "干衣机" else "海信洗衣机")
                     is_complete = False
                     if status_val in ("complete", "7"):
                         is_complete = True
@@ -376,12 +442,12 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
                         r_curr = r_val[0] if isinstance(r_val, list) else r_val
                         if str(r_curr) == "7":
                             is_complete = True
-                    elif msg_content and any(w in msg_content for w in ("洗衣完毕", "洗涤完成", "烘干完成", "已完成洗衣")):
+                    elif msg_content and any(w in msg_content for w in ("洗衣完毕", "洗涤完成", "烘干完成", "已完成洗衣", "已完成烘干")):
                         is_complete = True
                     elif str(tag_val) == "8001008":
                         is_complete = True
 
-                    if is_complete and coord.device_type == "洗衣机":
+                    if is_complete and coord.device_type in ("洗衣机", "干衣机"):
                         if hasattr(coord.client, "status") and isinstance(coord.client.status, dict):
                             coord.client.status.update({
                                 "run_status": 7,
@@ -389,14 +455,16 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
                                 "cycle_phase": "complete",
                                 "is_running": False,
                                 "remain_time": 0,
+                                "remaining_minutes": 0,
                                 "start_pause_status": False,
                             })
                             coord.async_set_updated_data(coord.client.get_status())
 
-                    if is_complete:
-                        content_desc = msg_content or f"【{dev_name}】已完成洗衣！"
+                    if is_complete and coord.device_type in ("洗衣机", "干衣机"):
+                        action_name = "烘干" if coord.device_type == "干衣机" else "洗衣"
+                        content_desc = msg_content or f"【{dev_name}】已完成{action_name}！"
                         hass.bus.async_fire(
-                            "hisense_washer_complete",
+                            f"hisense_{'dryer' if coord.device_type == '干衣机' else 'washer'}_complete",
                             {
                                 "device_id": str(dev_id),
                                 "device_name": dev_name,
@@ -407,9 +475,9 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
                         )
                         persistent_notification.async_create(
                             hass,
-                            f"收到海信洗衣机推送：{content_desc}\n推送时间：{now_str}",
-                            title="海信智慧家 - 洗衣完成提醒",
-                            notification_id=f"hisense_washer_complete_{dev_id}",
+                            f"收到{dev_name}推送：{content_desc}\n推送时间：{now_str}",
+                            title=f"海信智慧家 - {action_name}完成提醒",
+                            notification_id=f"hisense_{coord.device_type}_complete_{dev_id}",
                         )
 
                     # 立即刷新所有绑定该 coordinator 的实体状态
@@ -467,6 +535,7 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
         "sensor",
         "binary_sensor",
         "select",
+        "media_player",
     ]
     await hass.config_entries.async_forward_entry_setups(entry, platforms)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
@@ -487,6 +556,7 @@ async def async_unload_entry(hass: core.HomeAssistant, entry: config_entries.Con
         "sensor",
         "binary_sensor",
         "select",
+        "media_player",
     ]
     unload_ok = await hass.config_entries.async_unload_platforms(entry, platforms)
     if unload_ok:

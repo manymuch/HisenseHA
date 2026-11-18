@@ -34,6 +34,34 @@ AC_ENERGY_SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
     ),
 )
 
+AC_HUMIDITY_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="humidity",
+    translation_key="ac_humidity",
+    native_unit_of_measurement="%",
+    device_class=SensorDeviceClass.HUMIDITY,
+    state_class=SensorStateClass.MEASUREMENT,
+    icon="mdi:water-percent",
+)
+
+TV_SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
+    SensorEntityDescription(
+        key="volume",
+        translation_key="tv_volume",
+        icon="mdi:volume-high",
+    ),
+    SensorEntityDescription(
+        key="source",
+        translation_key="tv_source",
+        icon="mdi:video-input-hdmi",
+    ),
+    SensorEntityDescription(
+        key="last_key",
+        translation_key="tv_last_key",
+        icon="mdi:remote",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+)
+
 WASHER_SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
     SensorEntityDescription(
         key="machine_state",
@@ -210,6 +238,8 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         for desc in AC_ENERGY_SENSOR_DESCRIPTIONS
     ]
     async_add_entities(sensors)
+    for coordinator in ac_coordinators:
+        _add_ac_humidity_sensor(coordinator, async_add_entities)
 
     fridge_coordinators = [
         c for c in coordinators.values() if c.device_type == "冰箱"
@@ -246,6 +276,17 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         for description in DRYER_SENSOR_DESCRIPTIONS
     )
 
+    tv_coordinators = [
+        coordinator
+        for coordinator in coordinators.values()
+        if getattr(coordinator, "device_type", None) == "电视"
+    ]
+    async_add_entities(
+        HisenseTVSensor(coordinator, description)
+        for coordinator in tv_coordinators
+        for description in TV_SENSOR_DESCRIPTIONS
+    )
+
     valid_coordinators = [
         c for c in coordinators.values()
         if hasattr(c, "client") and hasattr(c.client, "device_id")
@@ -254,6 +295,60 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         HisensePushMessageSensor(coordinator)
         for coordinator in valid_coordinators
     )
+
+
+def _add_ac_humidity_sensor(coordinator, async_add_entities):
+    """Add humidity sensor only when reported by AC."""
+    if coordinator.__dict__.get("_ac_humidity_sensor_added"):
+        return
+    status = coordinator.data or coordinator.client.get_status()
+    if status.get("humidity") is not None:
+        coordinator.__dict__["_ac_humidity_sensor_added"] = True
+        async_add_entities([HisenseACHumiditySensor(coordinator, AC_HUMIDITY_SENSOR_DESCRIPTION)])
+        return
+
+    remove_listener = None
+
+    def _on_update():
+        if remove_listener is not None:
+            remove_listener()
+        _add_ac_humidity_sensor(coordinator, async_add_entities)
+
+    remove_listener = coordinator.async_add_listener(_on_update)
+
+
+class HisenseACHumiditySensor(HisenseEntity, SensorEntity):
+    entity_description: SensorEntityDescription
+
+    def __init__(self, coordinator, description: SensorEntityDescription):
+        super().__init__(
+            coordinator,
+            description.key,
+            description.key,
+            description.icon,
+        )
+        self.entity_description = description
+
+    @property
+    def native_value(self):
+        return self.status.get("humidity")
+
+
+class HisenseTVSensor(HisenseEntity, SensorEntity):
+    entity_description: SensorEntityDescription
+
+    def __init__(self, coordinator, description: SensorEntityDescription):
+        super().__init__(
+            coordinator,
+            description.key,
+            description.key,
+            description.icon,
+        )
+        self.entity_description = description
+
+    @property
+    def native_value(self):
+        return self.status.get(self.entity_description.key)
 
 
 class HisenseFridgeSensor(HisenseEntity, SensorEntity):

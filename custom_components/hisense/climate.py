@@ -13,6 +13,9 @@ from homeassistant.components.climate.const import (
     FAN_DIFFUSE,
     SWING_ON,
     SWING_OFF,
+    SWING_VERTICAL,
+    SWING_HORIZONTAL,
+    SWING_BOTH,
 )
 from homeassistant.const import UnitOfTemperature, ATTR_TEMPERATURE
 from homeassistant.exceptions import HomeAssistantError
@@ -63,7 +66,13 @@ class HisenseACClimate(HisenseEntity, ClimateEntity):
             HVACMode.AUTO,
             HVACMode.OFF,
         ]
-        self._attr_swing_modes = [SWING_OFF, SWING_ON]
+        self._attr_swing_modes = [
+            SWING_OFF,
+            SWING_ON,
+            SWING_VERTICAL,
+            SWING_HORIZONTAL,
+            SWING_BOTH,
+        ]
         self._attr_temperature_unit = UnitOfTemperature.CELSIUS
         self._hvac_mode_lookup = {
             0: HVACMode.FAN_ONLY,
@@ -105,6 +114,10 @@ class HisenseACClimate(HisenseEntity, ClimateEntity):
         return self.status.get("indoor_temperature")
 
     @property
+    def current_humidity(self):
+        return self.status.get("humidity")
+
+    @property
     def target_temperature(self):
         return self.status.get("desired_temperature")
 
@@ -125,10 +138,15 @@ class HisenseACClimate(HisenseEntity, ClimateEntity):
 
     @property
     def swing_mode(self):
-        enabled = self.status.get("left_right_wind_full_control")
-        if enabled is None:
-            return None
-        return SWING_ON if enabled else SWING_OFF
+        v_swing = bool(self.status.get("up_down_wind_full_control"))
+        h_swing = bool(self.status.get("left_right_wind_full_control"))
+        if v_swing and h_swing:
+            return SWING_BOTH
+        if v_swing:
+            return SWING_VERTICAL
+        if h_swing:
+            return SWING_HORIZONTAL
+        return SWING_OFF
 
     async def async_added_to_hass(self):
         await super().async_added_to_hass()
@@ -184,10 +202,19 @@ class HisenseACClimate(HisenseEntity, ClimateEntity):
         if not self.status.get("power_on"):
             _LOGGER.error("Cannot set swing mode when power is off")
             return
-        if await self.client.set_swing_mode(swing_mode == SWING_ON):
-            self.coordinator.async_update_from_client()
-            return
-        raise HomeAssistantError("Failed to set Hisense AC swing mode")
+        if swing_mode == SWING_OFF:
+            await self.client.set_vertical_swing(False)
+            await self.client.set_horizontal_swing(False)
+        elif swing_mode == SWING_VERTICAL:
+            await self.client.set_vertical_swing(True)
+            await self.client.set_horizontal_swing(False)
+        elif swing_mode == SWING_HORIZONTAL:
+            await self.client.set_vertical_swing(False)
+            await self.client.set_horizontal_swing(True)
+        elif swing_mode in (SWING_BOTH, SWING_ON):
+            await self.client.set_vertical_swing(True)
+            await self.client.set_horizontal_swing(True)
+        self.coordinator.async_update_from_client()
 
     async def async_set_hvac_mode(self, hvac_mode):
         """Set new target HVAC mode."""

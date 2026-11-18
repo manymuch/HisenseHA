@@ -304,6 +304,8 @@ def _device_type_from_name(device_type_name) -> str | None:
         return "洗衣机"
     if "dryer" in text or "干衣" in text or "烘干" in text:
         return "干衣机"
+    if "tv" in text or "television" in text or "电视" in text:
+        return "电视"
     return None
 
 
@@ -1639,13 +1641,60 @@ class HiSenseDryer(_HiSenseDevice):
         self._store_states(updates, states)
         return set(updates)
 
-    async def _send_aihome_action(self, command, params, *, source_name=None):
-        """Keep dryer support read-only even if an inherited method is called."""
-        return False
+    async def _control(self, command, params, *, source_name=None):
+        return await self._send_aihome_action(command, params, source_name=source_name)
 
-    async def _send_aihome_label(self, label_key: str, label_value) -> bool:
-        """Keep dryer support read-only even if an inherited method is called."""
-        return False
+    async def turn_on(self):
+        ok = await self._control(
+            "connector.device.command.Power",
+            {"onAndOff": {"code": "On"}},
+            source_name=self.POWER_SOURCE_NAME,
+        )
+        if ok:
+            self._set_pending_status({"power_on": True, "machine_state": "standby"})
+        return ok
+
+    async def turn_off(self):
+        ok = await self._control(
+            "connector.device.command.Power",
+            {"onAndOff": {"code": "Off"}},
+            source_name=self.POWER_SOURCE_NAME,
+        )
+        if ok:
+            self._set_pending_status({"power_on": False, "is_running": False, "machine_state": "off"})
+        return ok
+
+    async def start_pause(self, running: bool):
+        value = 1 if running else 0
+        ok = await self._control(
+            "connector.device.command.StartStop",
+            {"startStop": {"value": value}},
+        )
+        if ok:
+            self._set_pending_status({
+                "is_running": bool(running),
+                "run_state": 1 if running else 0,
+                "machine_state": "running" if running else "paused",
+            })
+        return ok
+
+    async def set_child_lock(self, enabled: bool):
+        ok = await self._control(
+            "connector.device.command.SetChildLock",
+            {"childLock": {"value": int(enabled)}},
+        )
+        if ok:
+            self._set_pending_status({"child_lock": bool(enabled)})
+        return ok
+
+    async def set_program(self, mode_id: int):
+        ok = await self._control(
+            "connector.device.command.SetModes",
+            {"modes": {"value": int(mode_id)}},
+        )
+        if ok:
+            self._set_pending_status({"program": int(mode_id)})
+        return ok
 
     def get_status(self):
         return json.loads(json.dumps(self.status))
@@ -1714,6 +1763,26 @@ class HiSenseAC(_HiSenseDevice):
             )
         if "fastCoolHeatSwitch" in states:
             status["fast_cool_heat"] = _as_bool(states["fastCoolHeatSwitch"])
+        if "upDownWind" in states:
+            status["up_down_wind"] = _as_int(states["upDownWind"])
+        if "upDownWindFullControl" in states:
+            status["up_down_wind_full_control"] = _as_bool(
+                states["upDownWindFullControl"]
+            )
+        if "aiEcoSwitch" in states or "aIEcoSwitch" in states:
+            status["ai_eco_mode"] = _as_bool(
+                states.get("aiEcoSwitch", states.get("aIEcoSwitch"))
+            )
+        if "clearSwitch" in states or "indoorClearSwitch" in states:
+            status["clear_switch"] = _as_bool(
+                states.get("clearSwitch", states.get("indoorClearSwitch"))
+            )
+        if "prevDirectBlow" in states:
+            status["prev_direct_blow"] = _as_bool(states["prevDirectBlow"])
+        if "humidity" in states or "realHumidity" in states:
+            status["humidity"] = _as_number(
+                states.get("humidity", states.get("realHumidity"))
+            )
         status = {key: value for key, value in status.items() if value is not None}
         self.status.update(status)
         return set(status)
@@ -1760,6 +1829,22 @@ class HiSenseAC(_HiSenseDevice):
             updates["fast_cool_heat"] = _as_bool(value_for("fastCoolHeatSwitch"))
         elif command == "connector.device.command.SetNatrueWind":
             updates["nature_wind"] = _as_bool(value_for("natrueWind"))
+        elif command in (
+            "connector.device.command.SetUpDownWindFullControl",
+            "connector.device.command.SetUpDownWind",
+        ):
+            ud_full = value_for("upDownWindFullControl")
+            if ud_full is not None:
+                updates["up_down_wind_full_control"] = _as_bool(ud_full)
+            ud_val = value_for("upDownWind")
+            if ud_val is not None:
+                updates["up_down_wind"] = _as_int(ud_val)
+        elif command == "connector.device.command.SetAIEcoSwitch":
+            updates["ai_eco_mode"] = _as_bool(value_for("aiEcoSwitch"))
+        elif command == "connector.device.command.SetClearSwitch":
+            updates["clear_switch"] = _as_bool(value_for("clearSwitch"))
+        elif command == "connector.device.command.SetPrevDirectBlow":
+            updates["prev_direct_blow"] = _as_bool(value_for("prevDirectBlow"))
 
         if updates:
             self._set_pending_status(updates)
@@ -1841,6 +1926,42 @@ class HiSenseAC(_HiSenseDevice):
         return await self._control(
             "connector.device.command.SetWindSpeed",
             {"autoWind": {"value": int(enabled)}},
+        )
+
+    async def set_vertical_swing(self, enabled: bool):
+        return await self._control(
+            "connector.device.command.SetUpDownWindFullControl",
+            {"upDownWindFullControl": {"value": int(enabled)}},
+        )
+
+    async def set_vertical_wind(self, angle: int):
+        return await self._control(
+            "connector.device.command.SetUpDownWind",
+            {"upDownWind": {"value": int(angle)}},
+        )
+
+    async def set_horizontal_swing(self, enabled: bool):
+        return await self._control(
+            "connector.device.command.SetLeftRightWindFullControl",
+            {"leftRightWindFullControl": {"value": int(enabled)}},
+        )
+
+    async def set_ai_eco_mode(self, enabled: bool):
+        return await self._control(
+            "connector.device.command.SetAIEcoSwitch",
+            {"aiEcoSwitch": {"value": int(enabled)}},
+        )
+
+    async def set_clear_switch(self, enabled: bool):
+        return await self._control(
+            "connector.device.command.SetClearSwitch",
+            {"clearSwitch": {"value": int(enabled)}},
+        )
+
+    async def set_prev_direct_blow(self, enabled: bool):
+        return await self._control(
+            "connector.device.command.SetPrevDirectBlow",
+            {"prevDirectBlow": {"value": int(enabled)}},
         )
 
     async def set_prompt_sound(self, enabled: bool):
@@ -1979,6 +2100,13 @@ class HiSenseFridge(_HiSenseDevice):
             "ai_control_temp_mode": flag("workMode.AIControlTemp"),
             "quiet_mode": flag("quietModeSwitch"),
             "quick_cooling_mode": flag("workMode.QuickCooling"),
+            "keep_fresh_mode": flag("workMode.KeepFresh"),
+            "party_mode": flag("workMode.Party"),
+            "power_saving_mode": flag("workMode.PowerSaving"),
+            "quick_frozen_mode": flag("workMode.QuickFrozen"),
+            "quick_deep_frozen_mode": flag("workMode.QuickDeepFrozen"),
+            "ion_fresh_mode": flag("ionFreshSwitch", "IonFreshSwitch"),
+            "variation_power": flag("variationTemperatureSwitch", "variaTempSwitch"),
             # 变温空间
             "variation_mode_id": variation,
             "variation_mode": (
@@ -2196,4 +2324,128 @@ class HiSenseFridge(_HiSenseDevice):
         except (TypeError, ValueError):
             return lower
         return max(lower, min(upper, number))
+
+    async def set_ion_fresh(self, enabled: bool):
+        value = MODE_SWITCH_ON if enabled else MODE_SWITCH_OFF
+        ok = await self._send_aihome_action(
+            COMMAND_PREFIX + "SetIonFreshSwitch",
+            {"ionFreshSwitch": {"value": value}},
+        )
+        if ok:
+            self._set_pending_status({"ion_fresh_mode": bool(enabled)})
+        return ok
+
+    async def set_variation_power(self, enabled: bool):
+        value = MODE_SWITCH_ON if enabled else MODE_SWITCH_OFF
+        ok = await self._send_aihome_action(
+            COMMAND_PREFIX + "SetVariationTemperatureSwitch",
+            {"variationTemperatureSwitch": {"value": value}},
+        )
+        if ok:
+            self._set_pending_status({"variation_power": bool(enabled)})
+        return ok
+
+
+class HiSenseTV(_HiSenseDevice):
+    """Hisense AIHome TV client."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.status = {
+            "online": True,
+            "power_on": False,
+            "volume": 20,
+            "is_volume_muted": False,
+            "source": "TV",
+            "last_key": None,
+        }
+
+    def _update_from_states(self, states: dict):
+        """Parse named states reported by Hisense TV."""
+        updates = {}
+        if "onlineStatus" in states:
+            updates["online"] = _as_bool(states["onlineStatus"])
+        if "powerStatus" in states or "power" in states:
+            updates["power_on"] = _as_bool(states.get("powerStatus", states.get("power")))
+        if "volume" in states:
+            vol = _as_int(states.get("volume"))
+            if vol is not None:
+                updates["volume"] = vol
+        if "mute" in states or "isMute" in states:
+            updates["is_volume_muted"] = _as_bool(states.get("mute", states.get("isMute")))
+        if "source" in states or "input" in states:
+            updates["source"] = str(states.get("source", states.get("input")))
+        if "lastKey" in states:
+            updates["last_key"] = str(states.get("lastKey"))
+        self.status.update(updates)
+        return set(updates)
+
+    async def _control(self, command, params, *, source_name=None):
+        return await self._send_aihome_action(command, params, source_name=source_name)
+
+    async def turn_on(self):
+        ok = await self._control(
+            "connector.device.command.Power",
+            {"onAndOff": {"code": "On"}},
+            source_name=self.POWER_SOURCE_NAME,
+        )
+        if not ok:
+            ok = await self.send_key("KEY_POWER")
+        if ok:
+            self._set_pending_status({"power_on": True})
+        return ok
+
+    async def turn_off(self):
+        ok = await self._control(
+            "connector.device.command.Power",
+            {"onAndOff": {"code": "Off"}},
+            source_name=self.POWER_SOURCE_NAME,
+        )
+        if not ok:
+            ok = await self.send_key("KEY_POWER")
+        if ok:
+            self._set_pending_status({"power_on": False})
+        return ok
+
+    async def send_key(self, key: str):
+        ok = await self._send_aihome_action(
+            "connector.device.command.PressKeyEvent",
+            {"key": key},
+        )
+        if not ok:
+            try:
+                result = await self._post(
+                    self.session, self.access_token, self.customer_id,
+                    "https://mobile-aiot.hismarttv.com/mobilemsg/push/v5.3/remoter",
+                    {"deviceId": str(self.device_id), "key": key, "msgtype": "remoter"},
+                )
+                ok = self._success(result)
+            except Exception:
+                pass
+        if ok:
+            self._set_pending_status({"last_key": key})
+        return ok
+
+    async def volume_up(self):
+        ok = await self.send_key("KEY_VOLUMEUP")
+        if ok:
+            curr = self.status.get("volume") or 20
+            self._set_pending_status({"volume": min(100, curr + 1)})
+        return ok
+
+    async def volume_down(self):
+        ok = await self.send_key("KEY_VOLUMEDOWN")
+        if ok:
+            curr = self.status.get("volume") or 20
+            self._set_pending_status({"volume": max(0, curr - 1)})
+        return ok
+
+    async def mute(self, mute: bool = True):
+        ok = await self.send_key("KEY_MUTE")
+        if ok:
+            self._set_pending_status({"is_volume_muted": bool(mute)})
+        return ok
+
+    def get_status(self):
+        return json.loads(json.dumps(self.status))
 

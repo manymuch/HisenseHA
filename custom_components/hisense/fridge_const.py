@@ -40,6 +40,13 @@ WORK_MODE_COMMANDS: dict[str, tuple[str, str]] = {
     "AI_ECO": (COMMAND_PREFIX + "SetAIEcoSwitch", "aiEcoSwitch"),
     "AI_CONTROL_TEMP": (COMMAND_PREFIX + "SetModes.AIControlTemp", "aiControlTempModeSwitch"),
     "QUIET": (COMMAND_PREFIX + "SetQuietModeSwitch", "quietModeSwitch"),
+    "KEEP_FRESH": (COMMAND_PREFIX + "SetModes.KeepFresh", "keepFreshModeSwitch"),
+    "PARTY": (COMMAND_PREFIX + "SetModes.Party", "partyModeSwitch"),
+    "POWER_SAVING": (COMMAND_PREFIX + "SetModes.PowerSaving", "powerSavingModeSwitch"),
+    "QUICK_FROZEN": (COMMAND_PREFIX + "SetModes.QuickFrozen", "quickFrozenModeSwitch"),
+    "QUICK_DEEP_FROZEN": (COMMAND_PREFIX + "SetModes.QuickDeepFrozen", "quickDeepFrozenModeSwitch"),
+    "ION_FRESH": (COMMAND_PREFIX + "SetIonFreshSwitch", "ionFreshSwitch"),
+    "VARIATION_POWER": (COMMAND_PREFIX + "SetVariationTemperatureSwitch", "variationTemperatureSwitch"),
 }
 
 WORK_MODE_STATUS_KEYS = {
@@ -51,10 +58,19 @@ WORK_MODE_STATUS_KEYS = {
     "AI_ECO": "ai_eco_mode",
     "AI_CONTROL_TEMP": "ai_control_temp_mode",
     "QUIET": "quiet_mode",
+    "KEEP_FRESH": "keep_fresh_mode",
+    "PARTY": "party_mode",
+    "POWER_SAVING": "power_saving_mode",
+    "QUICK_FROZEN": "quick_frozen_mode",
+    "QUICK_DEEP_FROZEN": "quick_deep_frozen_mode",
+    "ION_FRESH": "ion_fresh_mode",
+    "VARIATION_POWER": "variation_power",
 }
 WORK_MODE_LABELS = {
     "SMART": "智能", "DAILY": "日常", "QUICK_COOLING": "速冷",
     "SUPER_FROZEN": "急冻", "HOLIDAY": "假日",
+    "KEEP_FRESH": "保鲜", "PARTY": "聚会", "POWER_SAVING": "节能",
+    "QUICK_FROZEN": "速冻", "QUICK_DEEP_FROZEN": "深冷",
 }
 RONSHEN_VARIATION_TEMP_SPACE_VALUES = {0: "冰鲜", 1: "零度", 2: "母婴"}
 

@@ -301,49 +301,89 @@ password = MD5(f"{DeviceKey}&0&MD5{DeviceSecret}").lower()
 
 ---
 
-## 七、全品类家电设备字段速查对照表
+## 七、全品类家电设备字段与控制指令速查对照表
 
-### 7.1 洗衣机与干衣机（核心字段）
-| 字段名称 | 类型 | 取值范围与含义 | 对应实体说明 |
+### 7.1 洗衣机与干衣机（核心字段与控制）
+| 字段名称 | 类型 | 取值范围与含义 | 对应实体说明与控制指令 |
 | :--- | :--- | :--- | :--- |
-| `powerStatus` | string/int | `"1"`: 开机, `"0"`: 关机 | 电源开关实体 |
+| `powerStatus` | string/int | `"1"`: 开机, `"0"`: 关机 | 电源开关实体（控制指令：`Power`） |
 | `startPauseStatus` | string/int | `"0"`: 待机, `"1"`: 暂停, `"2"`: 运转中 | 运转/暂停状态 |
-| `startStop` | string/int | `"1"`: 启动, `"0"`: 停止 | 启停状态标志 |
-| `runStatus` | int | `0`: 待机<br>`1`: 预约等待<br>`2`: 主洗/称重<br>`3`: 漂洗<br>`4`: 脱水<br>`5`: 烘干<br>`7`: 完成<br>`10`: 抖散<br>`11`: 防皱 | 当前洗涤阶段枚举 |
-| `workMode` | int | 程序编号代码（`2`: 混合, `35`: 单烘, `22`: AI智洗, `40`: 速净 等） | 洗涤程序选择实体 |
+| `startStop` | string/int | `"1"`: 启动, `"0"`: 停止 | 启停开关实体（控制指令：`StartStop`） |
+| `runStatus` | int | `0`: 待机<br>`1`: 预约等待<br>`2`: 主洗/称重<br>`3`: 漂洗<br>`4`: 脱水<br>`5`: 烘干<br>`7`: 完成<br>`10`: 抖散<br>`11`: 防皱 | 当前洗涤/烘干阶段枚举（`7` 触发完成通知） |
+| `workMode` | int | 程序编号代码（如智能烘、棉麻、化纤、羊毛、单脱水等） | 程序选择实体（控制指令：`SetModes`） |
 | `remainRunTime` | int | 剩余运转分钟数 | 剩余时间实体（支持本地平滑倒计时） |
-| `washTemperature`| int | 水温（`0`: 冷水, `20`, `30`, `40`, `60`, `95` ℃） | 洗涤温度选择实体 |
-| `dehydrationSpeed`| int | 转速（`0`: 不脱水, `400` ~ `1400` 转） | 脱水转速选择实体 |
+| `washTemperature`| int | 水温（`0`: 冷水, `20`, `30`, `40`, `60`, `95` ℃） | 洗涤温度选择实体（控制指令：`SetTemperature`） |
+| `dehydrationSpeed`| int | 转速（`0`: 不脱水, `400` ~ `1400` 转） | 脱水转速选择实体（控制指令：`SetSpin`） |
 | `dryingMethod` | int | `0`: 关闭, `1`: 即穿, `2`: 即熨, `3`: 即存, `30`-`240`: 定时烘干（分） | 烘干模式选择实体 |
 | `dryingModes` | int | `1`: 低温烘干, `0`: 标准烘干 | 低温烘干开关实体 |
 | `doorLockStatus` | string/int | `"1"`: 已上锁, `"0"`: 未锁 | 门锁物理状态传感器 |
-| `childLock` | string/int | `"1"`: 开启, `"0"`: 关闭 | 运转童锁开关实体 |
+| `childLock` | string/int | `"1"`: 开启, `"0"`: 关闭 | 运转童锁开关实体（控制指令：`SetChildLock`） |
 | `detergentLackStatus` | string/int | `"0"`: 充足, `"1"`: 耗尽不足 | 洗涤剂缺料告警传感器 |
 | `softenLackStatus` | string/int | `"0"`: 充足, `"1"`: 耗尽不足 | 柔顺剂缺料告警传感器 |
 | `detergentMode` | int | 自动投放量（`0`: 关闭, `1`: 标准, `2`: 多, `3`: 少） | 洗涤剂投放挡位实体 |
 | `softenMode` | int | 柔顺剂投放量（`0`: 关闭, `1`: 标准, `2`: 多, `3`: 少） | 柔顺剂投放挡位实体 |
 
-### 7.2 空调
-| 字段名称 | 类型 | 取值范围与含义 | 对应实体说明 |
+### 7.2 空调（核心字段与控制）
+| 字段名称 | 类型 | 取值范围与含义 | 对应实体说明与控制指令 |
 | :--- | :--- | :--- | :--- |
-| `powerStatus` | string/int | `"1"`: 开机, `"0"`: 关机 | 空调开关 |
-| `workMode` | int | `0`: 制冷, `1`: 除湿, `2`: 送风, `3`: 制热, `4`: 智能/自动 | 运转模式（HVAC Mode） |
-| `setTemp` | float | 目标设定温度（16.0 ~ 32.0 ℃） | 设定温度（Target Temp） |
-| `windSpeed` | int | `0`: 自动, `1`: 低风, `2`: 中风, `3`: 高风, `4`: 强力风 | 风速选择 |
-| `indoorTemp` | float | 室内实测环境温度 | 当前室温传感器 |
+| `powerStatus` | string/int | `"1"`: 开机, `"0"`: 关机 | 空调温控器开关（控制指令：`Power`） |
+| `modes` / `workMode` | int | `0`: 送风, `1`: 制热, `2`: 制冷, `3`: 除湿, `4`: 自动 | 运转模式（控制指令：`SetModes`） |
+| `setTemperature` | float | 目标设定温度（16.0 ~ 32.0 ℃） | 设定温度（控制指令：`SetTemperature`） |
+| `realTemperature`| float | 室内实测环境温度 | 当前室温传感器 |
+| `humidity` / `realHumidity` | float | 室内实测湿度百分比 | 室内湿度传感器 |
+| `windSpeed` | int | `1`: 微风, `2`: 低风, `3`: 中风, `4`: 高风 | 风速挡位（控制指令：`SetWindSpeed`） |
+| `autoWind` | int/bool | `1`: 自动风速, `0`: 手动 | 自动风速控制（控制指令：`SetWindSpeed`） |
+| `upDownWindFullControl` | int/bool | `1`: 开启上下摆风, `0`: 关闭 | 上下摆风开关（控制指令：`SetUpDownWindFullControl`） |
+| `leftRightWindFullControl` | int/bool | `1`: 开启左右摆风, `0`: 关闭 | 左右摆风开关（控制指令：`SetLeftRightWindFullControl`） |
+| `aiEcoSwitch` | int/bool | `1`: 开启AI节能, `0`: 关闭 | AI节能开关（控制指令：`SetAIEcoSwitch`） |
+| `clearSwitch` | int/bool | `1`: 开启自清洁, `0`: 关闭 | 自清洁开关（控制指令：`SetClearSwitch`） |
+| `prevDirectBlow` | int/bool | `1`: 开启防直吹, `0`: 关闭 | 防直吹开关（控制指令：`SetPrevDirectBlow`） |
+| `screenSwitch` | int/bool | `1`: 开启屏显, `0`: 关闭屏显 | 屏显开关（控制指令：`SetScreenSwitch`） |
+| `heatSwitch` | int/bool | `1`: 开启电辅热, `0`: 关闭 | 电辅热开关（控制指令：`SetHeatSwitch`） |
+| `fastCoolHeatSwitch` | int/bool | `1`: 开启强力冷热, `0`: 关闭 | 快速冷暖开关（控制指令：`SetFastCoolHeatSwitch`） |
 
-### 7.3 冰箱
-| 字段名称 | 类型 | 取值范围与含义 | 对应实体说明 |
+### 7.3 冰箱（核心字段与控制）
+| 字段名称 | 类型 | 取值范围与含义 | 对应实体说明与控制指令 |
 | :--- | :--- | :--- | :--- |
-| `coldClosetTemp` | int | 冷藏室设定温度（2 ~ 8 ℃） | 冷藏室目标温度 |
-| `freezeClosetTemp`| int | 冷冻室设定温度（-24 ~ -15 ℃） | 冷冻室目标温度 |
-| `refrigeratorRealTemperature` | int | 实时测温传感器数据 | 各温区实时温度 |
-| `superCool` | int | `1`: 开启速冷, `0`: 关闭 | 速冷模式开关 |
-| `superFreeze` | int | `1`: 开启急冻, `0`: 关闭 | 急冻模式开关 |
-| `degerming` | int | `1`: 开启净味除菌 | 净味除菌开关 |
-| `doorOpenStatus` | int | `1`: 门未关好告警 | 门开超时告警传感器 |
+| `refrigeratorSetTemperature` | int | 冷藏室设定温度（2 ~ 8 ℃） | 冷藏室目标温度（控制指令：`SetTemperature.Refrigerator`） |
+| `freezeSetTemperature` | int | 冷冻室设定温度（-25 ~ -15 ℃） | 冷冻室目标温度（控制指令：`SetTemperature.Freeze`） |
+| `refrigeratorRealTemperature`| int | 冷藏室实测温度 | 冷藏室实时温度传感器 |
+| `freezeRealTemperature` | int | 冷冻室实测温度 | 冷冻室实时温度传感器 |
+| `dBDDegerming` | string/int | `"1"`: 运行中, `"0"`: 停止 | 离子除菌+净味开关（控制指令：`DBDDegerming`） |
+| `ionFreshSwitch` | string/int | `"1"`: 开启离子保鲜, `"0"`: 关闭 | 离子净味保鲜开关（控制指令：`SetIonFreshSwitch`） |
+| `variationTemperatureSwitch` | string/int | `"1"`: 变温室开启, `"0"`: 关闭 | 变温室启闭开关（控制指令：`SetVariationTemperatureSwitch`） |
+| `variationTempSpaceDrawer` | int | `0`: 原鲜/冰鲜, `1`: 0℃养鲜/零度, `2`: 母婴 | 变温抽屉模式选择实体 |
+| `workMode.Smart` | string/int | `"1"`: 智能模式开启, `"0"`: 关闭 | 智能模式开关（控制指令：`SetModes.Smart`） |
+| `workMode.QuickCooling` | string/int | `"1"`: 速冷模式开启, `"0"`: 关闭 | 速冷模式开关（控制指令：`SetModes.QuickCooling`） |
+| `workMode.SuperFrozen` | string/int | `"1"`: 急冻模式开启, `"0"`: 关闭 | 急冻模式开关（控制指令：`SetModes.SuperFrozen`） |
+| `workMode.Holiday` | string/int | `"1"`: 假日模式开启, `"0"`: 关闭 | 假日模式开关（控制指令：`SetModes.Holiday`） |
+| `workMode.Daily` | string/int | `"1"`: 日常模式开启, `"0"`: 关闭 | 日常模式开关（控制指令：`SetModes.Daily`） |
+| `workMode.KeepFresh` | string/int | `"1"`: 保鲜模式开启, `"0"`: 关闭 | 保鲜模式开关（控制指令：`SetModes.KeepFresh`） |
+| `workMode.Party` | string/int | `"1"`: 聚会模式开启, `"0"`: 关闭 | 聚会模式开关（控制指令：`SetModes.Party`） |
+| `workMode.PowerSaving` | string/int | `"1"`: 节能模式开启, `"0"`: 关闭 | 节能模式开关（控制指令：`SetModes.PowerSaving`） |
+| `aiEcoSwitch` | string/int | `"1"`: AI节能开启, `"0"`: 关闭 | 冰箱AI节能开关（控制指令：`SetAIEcoSwitch`） |
+| `refriOpenDoorAlarm` | string/int | `"1"`: 门未关好告警, `"0"`: 正常 | 冷藏门开告警传感器 |
+| `freezeOpenDoorAlarm` | string/int | `"1"`: 门未关好告警, `"0"`: 正常 | 冷冻门开告警传感器 |
 
-### 7.4 洗碗机与蒸烤箱
+### 7.4 电视（核心字段、媒体控制与按键事件）
+| 字段名称 / 按键码 | 类型 | 取值范围与含义 | 对应实体说明与控制指令 |
+| :--- | :--- | :--- | :--- |
+| `powerStatus` | string/int | `"1"`: 开机, `"0"`: 关机 | 媒体播放器开关（控制指令：`Power` / `KEY_POWER`） |
+| `volume` | int | 0 ~ 100 电视音量 | 媒体播放器音量（控制指令：`KEY_VOLUMEUP`, `KEY_VOLUMEDOWN`） |
+| `mute` | bool | `true`: 静音, `false`: 正常 | 媒体播放器静音开关（控制指令：`KEY_MUTE`） |
+| `source` | string | 当前信号源通道 | 信号源传感器 |
+| `KEY_HOME` | 按键码 | 主页键 | 遥控按键实体（主页） |
+| `KEY_RETURNS` | 按键码 | 返回键 | 遥控按键实体（返回） |
+| `KEY_MENU` | 按键码 | 菜单键 | 遥控按键实体（菜单） |
+| `KEY_OK` | 按键码 | 确认键 | 遥控按键实体（确认） |
+| `KEY_UP` / `DOWN` / `LEFT` / `RIGHT` | 按键码 | 方向上下左右导航键 | 遥控按键实体（方向导航） |
+| `KEY_CONTROL_CENTER` | 按键码 | 控制中心快捷键 | 遥控按键实体（控制中心） |
+> [!NOTE]
+> **电视双通道控制架构**：
+> 1. **云端通道**：通过海信云端动作网关下发 `connector.device.command.PressKeyEvent` 与推送接口 `https://mobile-aiot.hismarttv.com/mobilemsg/push/v5.3/remoter`；
+> 2. **局域网通道**：通过本地 UPnP `LanControlInfo` 协议（服务标识 `urn:schemas-upnp-org:service-1-0`）发送 `OpClass` / `OpType` / `OpPara` 实现极低延迟本地遥控。
+
+### 7.5 洗碗机与蒸烤箱
 - **洗碗机**：`runStatus` 状态映射为 `0: 待机, 1: 预洗, 2: 主洗, 3: 漂洗, 4: 烘干, 7: 完成`。
 - **蒸烤箱**：`workMode` 对应各烹饪模式；`targetTemp` 与 `remainRunTime` 分别表示设定温度与剩余烘烤时间。
 
