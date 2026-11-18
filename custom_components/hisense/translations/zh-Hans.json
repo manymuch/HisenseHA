@@ -36,6 +36,21 @@
     },
     "title": "海信智能设备"
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "海信家电运行选项",
+        "description": "配置洗涤中动态同步选项。为避免请求过频导致云端封号，待机状态完全不轮询（0次请求），洗涤中轮询间隔强制限制不得小于 5 分钟。",
+        "data": {
+          "enable_washer_dynamic_poll": "开启洗衣中动态轮询同步（默认关闭，保持 App 级本地倒计时与 MQTT 纯事件驱动）",
+          "washer_poll_interval": "洗衣中轮询同步间隔（分钟，最低强制限制为 5 分钟）"
+        }
+      }
+    },
+    "error": {
+      "interval_too_low": "轮询间隔过短！为防止被海信云端风控封号，轮询间隔强制不得低于 5 分钟。"
+    }
+  },
   "device": {
     "hisense_ac": {
       "name": "海信空调"

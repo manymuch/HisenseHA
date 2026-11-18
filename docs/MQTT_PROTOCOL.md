@@ -322,3 +322,40 @@ Sent when a major lifecycle event completes (such as washing machine cycle compl
 5. **Fire Home Assistant Events (广播标准化系统总线事件)**:
    Fire `hisense_mqtt_message` on the event bus for all incoming payloads to allow user automations, and `hisense_washer_complete` when cycles finish.
    收到推送时在 HA 事件总线上广播 `hisense_mqtt_message`，洗涤完成时触发 `hisense_washer_complete`，极大方便用户编写自动化联动。
+
+---
+
+## 7. App-Parity Architecture: Event Push & Local Countdown / 模拟官方 App 混合架构规范
+
+Through comprehensive binary decompilation of the official Hisense AIHome APK (`libapp.so`), the underlying design of appliance synchronization was uncovered:
+
+通过对海信爱家官方 APK 核心动态库（`libapp.so`）的深度反编译，揭示了官方 App 的状态同步底层架构机制：
+
+### 7.1 Why Standby Power-On Has No MQTT Push / 为什么开机与运行中没有 MQTT 推送？
+- **Discrete Notifications vs Telemetry Streams (通知与遥测分离)**:
+  Hisense IoT cloud separates continuous appliance telemetry from user notifications. The appliance reports high-frequency protocol updates to the cloud backend over its internal device channel. The cloud backend **does not broadcast high-frequency state updates (power-on, per-minute timer countdowns) to the mobile client topic `$iot/general/user/{customerId}/#`**.
+  海信 IoT 云端严格区分了“遥测数据流”与“通知消息”。洗衣机通过专有设备通道向云端上报高频数据，但云端**并不会把每一次开机、转速变化或分钟倒计时流向用户的 MQTT 通道**。
+- **Official App Behavior (官方 App 处理方式)**:
+  `LargeDevCardMultiWasherVM` does not implement `JhkMqttConsumer`. Instead, when the user opens the App card, it makes an on-demand HTTP query (`check_status`). If running, the App activates `_startTimeUpdateMode`, initiating a local countdown timer on the phone that ticks down remaining minutes locally, rather than streaming per-minute MQTT messages from the server.
+  官方 App 洗衣机卡片没有实现 MQTT 消费者，而是在进入卡片时发起单次 HTTP 查询，一旦检测到运转，App 本地启动 `_startTimeUpdateMode` 自行进行分钟倒计时，而非依赖云端持续推流。
+
+### 7.2 Home Assistant App-Parity Design / Home Assistant 拟真还原设计
+To deliver an optimal user experience while strictly adhering to zero-ban safety rules:
+为了在绝对保障 0 封号安全的前提下，提供与官方 App 相同的丝滑体验，集成采用以下三层拟真架构：
+
+1. **Standby State: Zero Polling / 关机/待机：严格零轮询**:
+   - `update_interval = None`: When idle, no HTTP requests are ever made. 100% immune to cloud frequency limits or IP blocks.
+   - 待机与关机状态下完全不向云端发起任何轮询（0次请求），彻底杜绝封号隐患。
+2. **Running State: Local Virtual Countdown / 运行中：本地分钟虚拟倒计时**:
+   - When running state is confirmed (via HA manual refresh button, power plug automation, or cycle start), HA initializes `_start_app_countdown`.
+   - Every 60 seconds, remaining minutes smoothly decrement in-memory and notify entity listeners, updating the UI smoothly with **0 network requests**.
+   - 检测到开机运转时，自动启动本地虚拟倒计时，每 60 秒在内存中平滑扣减剩余时间并刷新实体，UI 实时倒计时，**产生 0 次云端网络请求**。
+3. **Optional Dynamic Wash Polling (>= 5min Safe Rate) / 用户可选动态轮询（强制 >= 5分钟保底）**:
+   - Users can configure whether to enable periodic cloud sync *during washing* in Integration Options (`enable_washer_dynamic_poll`).
+   - **Hard Safety Limit**: Enforces a minimum interval of **at least 5 minutes** (`MIN_WASHER_POLL_INTERVAL = 5`). Even if enabled, a 30-minute wash cycle generates only ~6 requests, far below cloud anti-scraping thresholds.
+   - 用户可在集成选项中自主选择是否在洗涤中开启定时校验。**强制硬编码轮询间隔不得小于 5 分钟**。即便开启，30 分钟洗涤仅请求 6 次，处于绝对安全的白名单频次内。
+4. **Lifecycle Push Completion / 离散事件推送闭环**:
+   - When the cycle completes, Hisense cloud pushes `businessTag: 8001008` (`"洗衣机已洗衣完毕，快去处理吧"`).
+   - HA instantly catches this MQTT push, cancels the local countdown (`_stop_app_countdown`), resets entities to complete/idle, fires `hisense_washer_complete`, and sets `update_interval = None`.
+   - 洗涤完成时云端下发 `8001008` 推送，HA 瞬间捕获，立即停止倒计时，重置实体状态为完成，并切断轮询恢复待机零请求。
+

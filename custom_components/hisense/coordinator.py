@@ -11,7 +11,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
+from .const import (
+    DOMAIN,
+    CONF_ENABLE_WASHER_POLL,
+    CONF_WASHER_POLL_INTERVAL,
+    DEFAULT_ENABLE_WASHER_POLL,
+    DEFAULT_WASHER_POLL_INTERVAL,
+    MIN_WASHER_POLL_INTERVAL,
+)
 from .pyhisenseapi import HiSenseAC, HiSenseDryer, HiSenseFridge, HiSenseWasher
 
 
@@ -46,6 +53,8 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.last_push: dict[str, Any] | None = None
         self.push_history: list[dict[str, Any]] = []
         self._was_running = False
+        self._countdown_task: asyncio.Task | None = None
+        self._estimated_end_time: datetime | None = None
 
         initial_interval = (
             timedelta(seconds=_FRIDGE_SCAN_INTERVAL)
@@ -150,9 +159,112 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._adjust_poll_interval(data)
         super().async_set_updated_data(data)
 
+    def _start_app_countdown(self, status: dict[str, Any]) -> None:
+        """Mimic Hisense App's _startTimeUpdateMode to run a smooth local countdown."""
+        remain_mins = status.get("remaining_minutes")
+        if remain_mins is None:
+            val = status.get("remainRunTime")
+            if val is None and isinstance(status.get("protocol_nonzero_values"), dict):
+                val = status["protocol_nonzero_values"].get("remainRunTime")
+            if val is not None and str(val).isdigit():
+                remain_mins = int(val)
+
+        if remain_mins and remain_mins > 0:
+            self._estimated_end_time = dt_util.utcnow() + timedelta(minutes=remain_mins)
+            if self._countdown_task is None or self._countdown_task.done():
+                _LOGGER.debug(
+                    "Starting App countdown timer for %s: %d minutes (est. finish %s)",
+                    self.name,
+                    remain_mins,
+                    self._estimated_end_time,
+                )
+                self._countdown_task = self.hass.async_create_task(
+                    self._async_countdown_loop()
+                )
+
+    def _stop_app_countdown(self) -> None:
+        """Mimic Hisense App's _stopTimerUpdateMode to end the countdown."""
+        if self._countdown_task and not self._countdown_task.done():
+            self._countdown_task.cancel()
+            _LOGGER.debug("Stopped App countdown timer for %s", self.name)
+        self._countdown_task = None
+        self._estimated_end_time = None
+
+    async def _async_countdown_loop(self) -> None:
+        """Local minute countdown ticker without querying cloud servers."""
+        try:
+            while True:
+                await asyncio.sleep(60)
+                if not self._estimated_end_time:
+                    break
+                now = dt_util.utcnow()
+                diff_secs = (self._estimated_end_time - now).total_seconds()
+                if diff_secs <= 0:
+                    _LOGGER.debug("App countdown completed for %s; requesting sync", self.name)
+                    self.async_start_refresh()
+                    break
+
+                mins_left = max(1, int(diff_secs / 60))
+                if self.data and isinstance(self.data, dict):
+                    self.data["remaining_minutes"] = mins_left
+                    if isinstance(self.data.get("protocol_nonzero_values"), dict):
+                        self.data["protocol_nonzero_values"]["remainRunTime"] = str(mins_left)
+                    self.async_update_listeners()
+        except asyncio.CancelledError:
+            pass
+        except Exception as err:
+            _LOGGER.debug("Error in app countdown loop for %s: %s", self.name, err)
+        finally:
+            self._countdown_task = None
+
     def _adjust_poll_interval(self, status: dict[str, Any]) -> None:
-        """Process status updates and check washer completion without polling."""
+        """Process status updates, manage App countdown timer, and adjust polling interval."""
         self._check_washer_completion(status)
+
+        if self.device_type not in ("洗衣机", "干衣机"):
+            return
+
+        is_running = bool(status.get("is_running") or status.get("machine_state") == "running")
+        is_complete = (
+            status.get("machine_state") == "complete"
+            or status.get("run_status") == 7
+            or status.get("phase") == 7
+        )
+
+        if is_running and not is_complete:
+            # 1. 启动类似海信 App 的本地倒计时模式 (_startTimeUpdateMode)
+            self._start_app_countdown(status)
+
+            # 2. 检查用户是否开启了洗涤中动态轮询
+            options = self._entry.options if self._entry else {}
+            enable_poll = options.get(CONF_ENABLE_WASHER_POLL, DEFAULT_ENABLE_WASHER_POLL)
+            if enable_poll:
+                poll_interval = options.get(CONF_WASHER_POLL_INTERVAL, DEFAULT_WASHER_POLL_INTERVAL)
+                safe_interval = max(MIN_WASHER_POLL_INTERVAL, int(poll_interval))
+                new_interval = timedelta(minutes=safe_interval)
+                if self.update_interval != new_interval:
+                    self.update_interval = new_interval
+                    _LOGGER.info(
+                        "Hisense %s is running. Dynamic cloud polling active: every %d minutes (safe rate)",
+                        self.device_type,
+                        safe_interval,
+                    )
+            else:
+                if self.update_interval is not None:
+                    self.update_interval = None
+                    _LOGGER.debug(
+                        "Hisense %s is running. Dynamic polling disabled; relying on App countdown timer and MQTT push.",
+                        self.device_type,
+                    )
+        else:
+            # 停机/待机/完成：停止本地计时器，并严格关闭轮询（0次云端请求）
+            self._stop_app_countdown()
+            if self.update_interval is not None:
+                self.update_interval = None
+                _LOGGER.debug(
+                    "Hisense %s is idle/off/complete. Dynamic polling reset to None (zero cloud requests).",
+                    self.device_type,
+                )
 
     def _check_washer_completion(self, status: dict[str, Any]) -> None:
         """Trigger completion notification when washer finishes cycle."""
@@ -199,7 +311,8 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.async_start_refresh(delay=_CONTROL_REFRESH_DELAY)
 
     async def async_cancel_refresh(self) -> None:
-        """Stop delayed retries when the integration unloads."""
+        """Stop delayed retries and countdown timer when the integration unloads."""
+        self._stop_app_countdown()
         task = self._refresh_task
         if task and not task.done():
             task.cancel()

@@ -5,6 +5,13 @@ DOMAIN = "hisense"
 CONF_USERNAME = "username"
 CONF_PASSWORD = "password"
 
+# Options keys for washer dynamic polling
+CONF_ENABLE_WASHER_POLL = "enable_washer_dynamic_poll"
+CONF_WASHER_POLL_INTERVAL = "washer_poll_interval"
+DEFAULT_ENABLE_WASHER_POLL = False
+DEFAULT_WASHER_POLL_INTERVAL = 5  # minutes
+MIN_WASHER_POLL_INTERVAL = 5  # minutes (强制不得小于5分钟以防封号)
+
 
 def climate_limits_signal(device_id: str) -> str:
     """Dispatcher signal when per-device climate min/max limits change."""

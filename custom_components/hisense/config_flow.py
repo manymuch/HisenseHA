@@ -1,14 +1,28 @@
 import voluptuous as vol
-from homeassistant import config_entries
+from homeassistant import config_entries, core
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.selector import TextSelector, TextSelectorConfig, TextSelectorType
-from .const import DOMAIN, CONF_USERNAME, CONF_PASSWORD
+from .const import (
+    DOMAIN,
+    CONF_USERNAME,
+    CONF_PASSWORD,
+    CONF_ENABLE_WASHER_POLL,
+    CONF_WASHER_POLL_INTERVAL,
+    DEFAULT_ENABLE_WASHER_POLL,
+    DEFAULT_WASHER_POLL_INTERVAL,
+    MIN_WASHER_POLL_INTERVAL,
+)
 from .pyhisenseapi import HiSenseLogin
 
 class HisenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
     CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
+
+    @staticmethod
+    @core.callback
+    def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> config_entries.OptionsFlow:
+        return HisenseOptionsFlowHandler(config_entry)
 
     def __init__(self):
         self._home_options = None
@@ -218,3 +232,37 @@ class HisenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
             errors=errors,
         )
+
+
+class HisenseOptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle options for Hisense integration."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        self.config_entry = config_entry
+
+    async def async_step_init(self, user_input=None):
+        """Manage the options."""
+        errors = {}
+        if user_input is not None:
+            # 强制设定轮询间隔不得小于5分钟
+            interval = user_input.get(CONF_WASHER_POLL_INTERVAL, DEFAULT_WASHER_POLL_INTERVAL)
+            if interval < MIN_WASHER_POLL_INTERVAL:
+                errors[CONF_WASHER_POLL_INTERVAL] = "interval_too_low"
+            else:
+                return self.async_create_entry(title="", data=user_input)
+
+        options = self.config_entry.options
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_ENABLE_WASHER_POLL,
+                    default=options.get(CONF_ENABLE_WASHER_POLL, DEFAULT_ENABLE_WASHER_POLL),
+                ): bool,
+                vol.Required(
+                    CONF_WASHER_POLL_INTERVAL,
+                    default=options.get(CONF_WASHER_POLL_INTERVAL, DEFAULT_WASHER_POLL_INTERVAL),
+                ): vol.All(vol.Coerce(int), vol.Range(min=MIN_WASHER_POLL_INTERVAL)),
+            }
+        )
+        return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
+

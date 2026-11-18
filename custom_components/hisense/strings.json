@@ -36,6 +36,21 @@
     },
     "title": "Hisense Smart Device"
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Hisense Appliance Settings",
+        "description": "Configure dynamic polling. To avoid account bans from excessive requests, standby is strictly zero-polling, and wash-time polling is enforced to be at least 5 minutes.",
+        "data": {
+          "enable_washer_dynamic_poll": "Enable dynamic cloud polling during washing (default disabled, pure local countdown & MQTT)",
+          "washer_poll_interval": "Dynamic polling interval while washing (minutes, minimum 5 minutes)"
+        }
+      }
+    },
+    "error": {
+      "interval_too_low": "Polling interval must be at least 5 minutes to prevent account bans."
+    }
+  },
   "device": {
     "hisense_ac": {
       "name": "Hisense AC"
