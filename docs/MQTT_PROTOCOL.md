@@ -383,9 +383,61 @@ password = MD5(f"{DeviceKey}&0&MD5{DeviceSecret}").lower()
 > 1. **云端通道**：通过海信云端动作网关下发 `connector.device.command.PressKeyEvent` 与推送接口 `https://mobile-aiot.hismarttv.com/mobilemsg/push/v5.3/remoter`；
 > 2. **局域网通道**：通过本地 UPnP `LanControlInfo` 协议（服务标识 `urn:schemas-upnp-org:service-1-0`）发送 `OpClass` / `OpType` / `OpPara` 实现极低延迟本地遥控。
 
-### 7.5 洗碗机与蒸烤箱
-- **洗碗机**：`runStatus` 状态映射为 `0: 待机, 1: 预洗, 2: 主洗, 3: 漂洗, 4: 烘干, 7: 完成`。
-- **蒸烤箱**：`workMode` 对应各烹饪模式；`targetTemp` 与 `remainRunTime` 分别表示设定温度与剩余烘烤时间。
+### 7.5 蒸烤箱 / 烤箱 / 微蒸烤一体机（核心字段与控制指令）
+| 字段名称 | 类型 | 取值范围与含义 | 对应实体说明与控制指令 |
+| :--- | :--- | :--- | :--- |
+| `powerStatus` | string/int | `"1"`: 开机, `"0"`: 关机 | 电源开关（控制指令：`Power`） |
+| `runStatus` | int | `0`: 待机, `1`: 预热中, `2`: 烹饪中, `3`: 暂停, `4`/`7`: 完成 | 运行状态传感器，完成时自动触发全屋播报与通知 |
+| `workMode` | int | `1`: 热风对流, `2`: 纯烘烤, `3`: 烧烤, `4`: 纯蒸汽, `5`: 蒸烤模式, `6`: 发酵, `7`: 解冻, `8`: 保温, `9`: 空气炸 | 烹饪模式下拉选择（控制指令：`SetModes`） |
+| `setTemperature` | int | 30 ~ 250 ℃ 设定目标温度 | 烤箱目标温度设定（控制指令：`SetTemperature`） |
+| `realTemperature` | int | 内腔实测温度（℃） | 内腔温度传感器 |
+| `cookTime` | int | 设定烹饪时长（分钟） | 烹饪时长数值设定（控制指令：`CookTime`） |
+| `remainRunTime` | int | 剩余烹饪时间（分钟） | 剩余时长传感器（运转中支持本地 App 倒计时平滑刷新） |
+| `probeTemperature` | int | 食物探针温度（℃） | 探针温度传感器 |
+| `doorOpenStatus` | string/int | `"1"`: 门开启, `"0"`: 门关闭 | 烤箱门二值传感器 |
+| `waterBoxStatus` | string/int | `"1"`: 水箱缺水, `"0"`: 水位正常 | 蒸烤箱水箱缺水告警二值传感器 |
+| `childLock` | string/int | `"1"`: 童锁已锁定, `"0"`: 未锁定 | 烤箱童锁开关（控制指令：`ChildLock`） |
+| `cancelCurrentRunningState` | 指令 | 取消当前正在烹饪或预热的任务 | 取消运行指令 |
+
+### 7.6 洗碗机（核心字段与控制指令）
+| 字段名称 | 类型 | 取值范围与含义 | 对应实体说明与控制指令 |
+| :--- | :--- | :--- | :--- |
+| `powerStatus` | string/int | `"1"`: 开机, `"0"`: 关机 | 电源开关（控制指令：`Power`） |
+| `runStatus` | int | `0`: 待机, `1`: 预洗, `2`: 主洗, `3`: 漂洗, `4`: 烘干, `5`: 抑菌存储, `7`: 完成 | 洗涤阶段传感器，洗涤结束自动触发通知与事件 |
+| `workMode` | int | `1`: 标准洗, `2`: 强力洗, `3`: 节能洗, `4`: 快速洗, `5`: 晶亮洗, `6`: 智能洗, `7`: 自清洁, `8`: 单烘干 | 洗涤程序下拉选择（控制指令：`SetModes`） |
+| `remainRunTime` | int | 剩余洗涤时间（分钟） | 剩余时长传感器（运转中支持本地倒计时平滑刷新） |
+| `childLock` | string/int | `"1"`: 锁定, `"0"`: 解锁 | 童锁开关（控制指令：`ChildLock`） |
+| `saltLackStatus` | string/int | `"1"`: 缺软水盐, `"0"`: 正常 | 缺软水盐告警二值传感器 |
+| `rinseAidLackStatus` | string/int | `"1"`: 缺光亮剂/亮碟剂, `"0"`: 正常 | 缺光亮剂告警二值传感器 |
+| `doorOpenStatus` | string/int | `"1"`: 门开启, `"0"`: 门关闭 | 洗碗机门状态二值传感器 |
+
+### 7.7 热水器（电热水器 & 燃气热水器）
+| 字段名称 | 类型 | 取值范围与含义 | 对应实体说明与控制指令 |
+| :--- | :--- | :--- | :--- |
+| `powerStatus` | string/int | `"1"`: 开机, `"0"`: 关机 | 电源开关（控制指令：`Power`） |
+| `setTemperature` / `setWaterTemperature` | int | 35 ~ 75 ℃ 设定目标水温 | 目标水温设定滑块/数值（控制指令：`SetTemperature`） |
+| `realWaterTemperature` / `realTemperature` | int | 内胆/出水实时水温（℃） | 水温传感器 |
+| `heatingStatus` | string/int | `"1"`: 加热中, `"0"`: 保温中 | 加热运行状态二值传感器 |
+| `hotWaterQuantity` | int | 剩余可用热水量（升或百分比） | 剩余热水量传感器 |
+
+### 7.8 吸油烟机 & 燃气灶
+| 字段名称 | 类型 | 取值范围与含义 | 对应实体说明与控制指令 |
+| :--- | :--- | :--- | :--- |
+| `powerStatus` | string/int | `"1"`: 开机, `"0"`: 关机 | 油烟机电源开关（控制指令：`Power`） |
+| `windSpeed` / `gearControl` | int | `0`: 关, `1`: 弱风, `2`: 中风, `3`: 强风, `4`: 爆炒 | 风速挡位选择与传感器（控制指令：`WindSpeed`） |
+| `lightSwitch` | string/int | `"1"`: 照明开, `"0"`: 照明关 | 油烟机照明灯独立开关（控制指令：`LightSwitchControl`） |
+| `delayOffSwitch` | string/int | `"1"`: 延时关机开启, `"0"`: 关闭 | 延时关机开关（控制指令：`SetDelayOffSwitch`） |
+| `delayOffRemainTime` | int | 延时关机倒计时（分钟/秒） | 延时关机倒计时传感器 |
+| `firePower.left` / `leftFirePower` | int | 0: 熄火, 1 ~ 8: 火力等级 | 燃气灶左灶火力传感器（安全只读监控） |
+| `firePower.right` / `rightFirePower` | int | 0: 熄火, 1 ~ 8: 火力等级 | 燃气灶右灶火力传感器（安全只读监控） |
+| `orderTime.left` / `orderTime.right` | int | 左右灶定时剩余时间（分钟） | 灶具定时时长传感器 |
+
+### 7.9 除湿机、新风系统与酒柜
+| 设备分类 | 关键属性字段 | 控制指令与功能 | 对应 Home Assistant 实体 |
+| :--- | :--- | :--- | :--- |
+| **除湿机** | `targetHumidity` (30%~80%), `realHumidity`, `windSpeed`, `modes` (连续/舒适/干衣), `waterFullStatus`, `childLock` | `Power`, `Humidity`, `WindSpeed`, `SetModes`, `ChildLock` | 电源开关、湿度调节滑块、模式选择、当前湿度传感器、水满告警 |
+| **新风系统** | `ventilationWindSpeed`, `ventilationModes` (智能/普通/除醛), `powerStatus` | `Power`, `VentilationWindSpeed`, `VentilationModes` | 电源开关、风速挡位选择、模式选择、当前风量传感器 |
+| **酒柜** | `temperatureControl.zone1`, `temperatureControl.zone2` (5~20℃), `realTemperature.zone1/2`, `lightSwitch`, `humidity` | `Power`, `TemperatureControl.DualUnit.zone1/2`, `LightSwitchControl` | 电源开关、双温区独立温度滑块、双温区实测温度传感器、酒柜照明、湿度传感器 |
 
 ---
 
@@ -401,6 +453,6 @@ password = MD5(f"{DeviceKey}&0&MD5{DeviceSecret}").lower()
 3. **快照优先直接更新（Skip Redundant HTTP）**：
    若推送数据直接携带了 `status` 字典，直接在内存中更新实体属性并刷新侦听器，避免发起二次 HTTP 查询。
 4. **广播标准化总线事件（Event-Driven Automation）**：
-   收到推送时在事件总线上派发 `hisense_mqtt_message`，洗涤结束时派发 `hisense_washer_complete`，极大方便用户通过自动化联动小爱音箱播报或手机推送信鸽。
+   收到推送时在事件总线上派发 `hisense_mqtt_message`，运转结束时派发 `hisense_washer_complete`、`hisense_dryer_complete`、`hisense_dishwasher_complete`、`hisense_oven_complete`，极大方便用户通过自动化联动小爱音箱播报或手机推送信鸽。
 5. **洗涤中轮询强制风控保底（>= 5 分钟限制）**：
    若提供运行中动态轮询选项，必须在配置流与后台调度器中双重锁定最低时间阈值（不得小于 5 分钟），保护用户账号安全。

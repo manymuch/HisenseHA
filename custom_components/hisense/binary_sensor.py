@@ -114,6 +114,73 @@ FRIDGE_FLAG_DESCRIPTIONS: tuple[BinarySensorEntityDescription, ...] = (
 )
 
 
+OVEN_BINARY_SENSOR_DESCRIPTIONS = (
+    BinarySensorEntityDescription(
+        key="power_on", translation_key="oven_power", icon="mdi:power"
+    ),
+    BinarySensorEntityDescription(
+        key="door_open",
+        translation_key="oven_door_open",
+        device_class=BinarySensorDeviceClass.DOOR,
+        icon="mdi:door",
+    ),
+    BinarySensorEntityDescription(
+        key="water_box_lack",
+        translation_key="oven_water_box_lack",
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        icon="mdi:water-alert",
+    ),
+)
+
+DISHWASHER_BINARY_SENSOR_DESCRIPTIONS = (
+    BinarySensorEntityDescription(
+        key="power_on", translation_key="dishwasher_power", icon="mdi:power"
+    ),
+    BinarySensorEntityDescription(
+        key="door_open",
+        translation_key="dishwasher_door_open",
+        device_class=BinarySensorDeviceClass.DOOR,
+        icon="mdi:door",
+    ),
+    BinarySensorEntityDescription(
+        key="salt_lack",
+        translation_key="dishwasher_salt_lack",
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        icon="mdi:shaker-outline",
+    ),
+    BinarySensorEntityDescription(
+        key="rinse_aid_lack",
+        translation_key="dishwasher_rinse_aid_lack",
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        icon="mdi:bottle-tonic-outline",
+    ),
+)
+
+WATER_HEATER_BINARY_SENSOR_DESCRIPTIONS = (
+    BinarySensorEntityDescription(
+        key="power_on", translation_key="water_heater_power", icon="mdi:power"
+    ),
+    BinarySensorEntityDescription(
+        key="heating",
+        translation_key="water_heater_heating",
+        device_class=BinarySensorDeviceClass.RUNNING,
+        icon="mdi:water-boiler",
+    ),
+)
+
+DEHUMIDIFIER_BINARY_SENSOR_DESCRIPTIONS = (
+    BinarySensorEntityDescription(
+        key="power_on", translation_key="dehumidifier_power", icon="mdi:power"
+    ),
+    BinarySensorEntityDescription(
+        key="water_full",
+        translation_key="dehumidifier_water_full",
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        icon="mdi:water-alert",
+    ),
+)
+
+
 def _fridge_alarm_description(code: str) -> BinarySensorEntityDescription:
     return BinarySensorEntityDescription(
         key=f"alarm_{code}",
@@ -154,6 +221,26 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     ]
     for coordinator in fridge_coordinators:
         _add_fridge_entities(coordinator, async_add_entities)
+
+    oven_coordinators = [c for c in coordinators.values() if c.device_type == "烤箱"]
+    async_add_entities(
+        HisenseApplianceBinarySensor(c, d) for c in oven_coordinators for d in OVEN_BINARY_SENSOR_DESCRIPTIONS
+    )
+
+    dishwasher_coordinators = [c for c in coordinators.values() if c.device_type == "洗碗机"]
+    async_add_entities(
+        HisenseApplianceBinarySensor(c, d) for c in dishwasher_coordinators for d in DISHWASHER_BINARY_SENSOR_DESCRIPTIONS
+    )
+
+    water_heater_coordinators = [c for c in coordinators.values() if c.device_type == "热水器"]
+    async_add_entities(
+        HisenseApplianceBinarySensor(c, d) for c in water_heater_coordinators for d in WATER_HEATER_BINARY_SENSOR_DESCRIPTIONS
+    )
+
+    dehumidifier_coordinators = [c for c in coordinators.values() if c.device_type == "除湿机"]
+    async_add_entities(
+        HisenseApplianceBinarySensor(c, d) for c in dehumidifier_coordinators for d in DEHUMIDIFIER_BINARY_SENSOR_DESCRIPTIONS
+    )
 
 
 def _add_fridge_entities(coordinator, async_add_entities):
@@ -343,3 +430,25 @@ class HisenseDryerBinarySensor(HisenseEntity, BinarySensorEntity):
     @property
     def is_on(self):
         return self.status.get(self.entity_description.key)
+
+
+class HisenseApplianceBinarySensor(HisenseEntity, BinarySensorEntity):
+    """通用家电二值传感器（蒸烤箱/洗碗机/热水器/除湿机）."""
+
+    entity_description: BinarySensorEntityDescription
+
+    def __init__(self, coordinator, description: BinarySensorEntityDescription):
+        super().__init__(coordinator, description.key, description.key, description.icon)
+        self.entity_description = description
+
+    @property
+    def is_on(self) -> bool | None:
+        val = self.status.get(self.entity_description.key)
+        if isinstance(val, bool):
+            return val
+        if val in ("1", "true", "True", 1):
+            return True
+        if val in ("0", "false", "False", 0):
+            return False
+        return bool(val) if val is not None else None
+

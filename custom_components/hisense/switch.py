@@ -77,6 +77,67 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     if washer_entities:
         async_add_entities(washer_entities)
 
+    oven_coordinators = [c for c in coordinators.values() if c.device_type == "烤箱"]
+    oven_entities = []
+    for coordinator in oven_coordinators:
+        oven_entities.extend([
+            HisenseOvenPowerSwitch(coordinator),
+            HisenseOvenStartPauseSwitch(coordinator),
+            HisenseOvenChildLockSwitch(coordinator),
+        ])
+    if oven_entities:
+        async_add_entities(oven_entities)
+
+    dishwasher_coordinators = [c for c in coordinators.values() if c.device_type == "洗碗机"]
+    dishwasher_entities = []
+    for coordinator in dishwasher_coordinators:
+        dishwasher_entities.extend([
+            HisenseDishwasherPowerSwitch(coordinator),
+            HisenseDishwasherStartPauseSwitch(coordinator),
+            HisenseDishwasherChildLockSwitch(coordinator),
+        ])
+    if dishwasher_entities:
+        async_add_entities(dishwasher_entities)
+
+    water_heater_coordinators = [c for c in coordinators.values() if c.device_type == "热水器"]
+    if water_heater_coordinators:
+        async_add_entities([HisenseWaterHeaterPowerSwitch(c) for c in water_heater_coordinators])
+
+    hood_coordinators = [c for c in coordinators.values() if c.device_type == "油烟机"]
+    hood_entities = []
+    for coordinator in hood_coordinators:
+        hood_entities.extend([
+            HisenseHoodPowerSwitch(coordinator),
+            HisenseHoodLightSwitch(coordinator),
+            HisenseHoodDelayOffSwitch(coordinator),
+        ])
+    if hood_entities:
+        async_add_entities(hood_entities)
+
+    dehumidifier_coordinators = [c for c in coordinators.values() if c.device_type == "除湿机"]
+    dehumidifier_entities = []
+    for coordinator in dehumidifier_coordinators:
+        dehumidifier_entities.extend([
+            HisenseDehumidifierPowerSwitch(coordinator),
+            HisenseDehumidifierChildLockSwitch(coordinator),
+        ])
+    if dehumidifier_entities:
+        async_add_entities(dehumidifier_entities)
+
+    fresh_air_coordinators = [c for c in coordinators.values() if c.device_type == "新风系统"]
+    if fresh_air_coordinators:
+        async_add_entities([HisenseFreshAirPowerSwitch(c) for c in fresh_air_coordinators])
+
+    wine_coordinators = [c for c in coordinators.values() if c.device_type == "酒柜"]
+    wine_entities = []
+    for coordinator in wine_coordinators:
+        wine_entities.extend([
+            HisenseWineCabinetPowerSwitch(coordinator),
+            HisenseWineCabinetLightSwitch(coordinator),
+        ])
+    if wine_entities:
+        async_add_entities(wine_entities)
+
 
 
 def _add_fridge_degerming_switch(coordinator, async_add_entities):
@@ -656,3 +717,387 @@ class HisenseWasherSoftbakingSwitch(HisenseEntity, SwitchEntity):
             self.coordinator.async_update_from_client()
             return
         raise HomeAssistantError("关闭低温烘失败")
+
+
+# ============================================================================
+# 新增家电设备开关类：蒸烤箱、洗碗机、热水器、油烟机、除湿机、新风系统、酒柜
+# ============================================================================
+
+class HisenseOvenPowerSwitch(HisenseEntity, SwitchEntity):
+    _attr_translation_key = "oven_power"
+    _attr_icon = "mdi:power"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "oven_power", "oven_power")
+
+    @property
+    def is_on(self):
+        return self.status.get("power_on")
+
+    async def async_turn_on(self):
+        if await self.client.turn_on():
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to turn on Hisense oven")
+
+    async def async_turn_off(self):
+        if await self.client.turn_off():
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to turn off Hisense oven")
+
+
+class HisenseOvenStartPauseSwitch(HisenseEntity, SwitchEntity):
+    _attr_translation_key = "oven_start_pause"
+    _attr_icon = "mdi:play-pause"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "oven_start_pause", "oven_start_pause")
+
+    @property
+    def is_on(self):
+        return self.status.get("is_running")
+
+    async def async_turn_on(self):
+        if not self.status.get("power_on"):
+            raise HomeAssistantError("Cannot start Hisense oven while powered off")
+        if await self.client.start_pause(True):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to start Hisense oven")
+
+    async def async_turn_off(self):
+        if not self.status.get("power_on"):
+            raise HomeAssistantError("Cannot pause Hisense oven while powered off")
+        if await self.client.start_pause(False):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to pause Hisense oven")
+
+
+class HisenseOvenChildLockSwitch(HisenseEntity, SwitchEntity):
+    _attr_translation_key = "oven_child_lock"
+    _attr_icon = "mdi:account-lock"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "oven_child_lock", "oven_child_lock")
+
+    @property
+    def is_on(self):
+        return self.status.get("child_lock")
+
+    async def async_turn_on(self):
+        if not self.status.get("power_on"):
+            raise HomeAssistantError("Cannot set child lock while oven is powered off")
+        if await self.client.set_child_lock(True):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to enable child lock for Hisense oven")
+
+    async def async_turn_off(self):
+        if not self.status.get("power_on"):
+            raise HomeAssistantError("Cannot set child lock while oven is powered off")
+        if await self.client.set_child_lock(False):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to disable child lock for Hisense oven")
+
+
+class HisenseDishwasherPowerSwitch(HisenseEntity, SwitchEntity):
+    _attr_translation_key = "dishwasher_power"
+    _attr_icon = "mdi:power"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "dishwasher_power", "dishwasher_power")
+
+    @property
+    def is_on(self):
+        return self.status.get("power_on")
+
+    async def async_turn_on(self):
+        if await self.client.turn_on():
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to turn on Hisense dishwasher")
+
+    async def async_turn_off(self):
+        if await self.client.turn_off():
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to turn off Hisense dishwasher")
+
+
+class HisenseDishwasherStartPauseSwitch(HisenseEntity, SwitchEntity):
+    _attr_translation_key = "dishwasher_start_pause"
+    _attr_icon = "mdi:play-pause"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "dishwasher_start_pause", "dishwasher_start_pause")
+
+    @property
+    def is_on(self):
+        return self.status.get("is_running")
+
+    async def async_turn_on(self):
+        if not self.status.get("power_on"):
+            raise HomeAssistantError("Cannot start Hisense dishwasher while powered off")
+        if await self.client.start_pause(True):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to start Hisense dishwasher")
+
+    async def async_turn_off(self):
+        if not self.status.get("power_on"):
+            raise HomeAssistantError("Cannot pause Hisense dishwasher while powered off")
+        if await self.client.start_pause(False):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to pause Hisense dishwasher")
+
+
+class HisenseDishwasherChildLockSwitch(HisenseEntity, SwitchEntity):
+    _attr_translation_key = "dishwasher_child_lock"
+    _attr_icon = "mdi:account-lock"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "dishwasher_child_lock", "dishwasher_child_lock")
+
+    @property
+    def is_on(self):
+        return self.status.get("child_lock")
+
+    async def async_turn_on(self):
+        if not self.status.get("power_on"):
+            raise HomeAssistantError("Cannot set child lock while dishwasher is powered off")
+        if await self.client.set_child_lock(True):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to enable child lock for Hisense dishwasher")
+
+    async def async_turn_off(self):
+        if not self.status.get("power_on"):
+            raise HomeAssistantError("Cannot set child lock while dishwasher is powered off")
+        if await self.client.set_child_lock(False):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to disable child lock for Hisense dishwasher")
+
+
+class HisenseWaterHeaterPowerSwitch(HisenseEntity, SwitchEntity):
+    _attr_translation_key = "water_heater_power"
+    _attr_icon = "mdi:power"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "water_heater_power", "water_heater_power")
+
+    @property
+    def is_on(self):
+        return self.status.get("power_on")
+
+    async def async_turn_on(self):
+        if await self.client.turn_on():
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to turn on Hisense water heater")
+
+    async def async_turn_off(self):
+        if await self.client.turn_off():
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to turn off Hisense water heater")
+
+
+class HisenseHoodPowerSwitch(HisenseEntity, SwitchEntity):
+    _attr_translation_key = "hood_power"
+    _attr_icon = "mdi:power"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "hood_power", "hood_power")
+
+    @property
+    def is_on(self):
+        return self.status.get("power_on")
+
+    async def async_turn_on(self):
+        if await self.client.turn_on():
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to turn on Hisense hood")
+
+    async def async_turn_off(self):
+        if await self.client.turn_off():
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to turn off Hisense hood")
+
+
+class HisenseHoodLightSwitch(HisenseEntity, SwitchEntity):
+    _attr_translation_key = "hood_light"
+    _attr_icon = "mdi:lightbulb"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "hood_light", "hood_light")
+
+    @property
+    def is_on(self):
+        return self.status.get("light_on")
+
+    async def async_turn_on(self):
+        if await self.client.set_light(True):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to turn on Hisense hood light")
+
+    async def async_turn_off(self):
+        if await self.client.set_light(False):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to turn off Hisense hood light")
+
+
+class HisenseHoodDelayOffSwitch(HisenseEntity, SwitchEntity):
+    _attr_translation_key = "hood_delay_off"
+    _attr_icon = "mdi:clock-end"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "hood_delay_off", "hood_delay_off")
+
+    @property
+    def is_on(self):
+        return self.status.get("delay_off")
+
+    async def async_turn_on(self):
+        if await self.client.set_delay_off(True):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to enable delay off for Hisense hood")
+
+    async def async_turn_off(self):
+        if await self.client.set_delay_off(False):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to disable delay off for Hisense hood")
+
+
+class HisenseDehumidifierPowerSwitch(HisenseEntity, SwitchEntity):
+    _attr_translation_key = "dehumidifier_power"
+    _attr_icon = "mdi:power"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "dehumidifier_power", "dehumidifier_power")
+
+    @property
+    def is_on(self):
+        return self.status.get("power_on")
+
+    async def async_turn_on(self):
+        if await self.client.turn_on():
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to turn on Hisense dehumidifier")
+
+    async def async_turn_off(self):
+        if await self.client.turn_off():
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to turn off Hisense dehumidifier")
+
+
+class HisenseDehumidifierChildLockSwitch(HisenseEntity, SwitchEntity):
+    _attr_translation_key = "dehumidifier_child_lock"
+    _attr_icon = "mdi:account-lock"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "dehumidifier_child_lock", "dehumidifier_child_lock")
+
+    @property
+    def is_on(self):
+        return self.status.get("child_lock")
+
+    async def async_turn_on(self):
+        if not self.status.get("power_on"):
+            raise HomeAssistantError("Cannot set child lock while dehumidifier is powered off")
+        if await self.client.set_child_lock(True):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to enable child lock for Hisense dehumidifier")
+
+    async def async_turn_off(self):
+        if not self.status.get("power_on"):
+            raise HomeAssistantError("Cannot set child lock while dehumidifier is powered off")
+        if await self.client.set_child_lock(False):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to disable child lock for Hisense dehumidifier")
+
+
+class HisenseFreshAirPowerSwitch(HisenseEntity, SwitchEntity):
+    _attr_translation_key = "fresh_air_power"
+    _attr_icon = "mdi:power"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "fresh_air_power", "fresh_air_power")
+
+    @property
+    def is_on(self):
+        return self.status.get("power_on")
+
+    async def async_turn_on(self):
+        if await self.client.turn_on():
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to turn on Hisense fresh air system")
+
+    async def async_turn_off(self):
+        if await self.client.turn_off():
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to turn off Hisense fresh air system")
+
+
+class HisenseWineCabinetPowerSwitch(HisenseEntity, SwitchEntity):
+    _attr_translation_key = "wine_cabinet_power"
+    _attr_icon = "mdi:power"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "wine_cabinet_power", "wine_cabinet_power")
+
+    @property
+    def is_on(self):
+        return self.status.get("power_on")
+
+    async def async_turn_on(self):
+        if await self.client.turn_on():
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to turn on Hisense wine cabinet")
+
+    async def async_turn_off(self):
+        if await self.client.turn_off():
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to turn off Hisense wine cabinet")
+
+
+class HisenseWineCabinetLightSwitch(HisenseEntity, SwitchEntity):
+    _attr_translation_key = "wine_cabinet_light"
+    _attr_icon = "mdi:lightbulb"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "wine_cabinet_light", "wine_cabinet_light")
+
+    @property
+    def is_on(self):
+        return self.status.get("light_on")
+
+    async def async_turn_on(self):
+        if await self.client.set_light(True):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to turn on Hisense wine cabinet light")
+
+    async def async_turn_off(self):
+        if await self.client.set_light(False):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to turn off Hisense wine cabinet light")

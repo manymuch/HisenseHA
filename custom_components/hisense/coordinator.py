@@ -19,7 +19,22 @@ from .const import (
     DEFAULT_WASHER_POLL_INTERVAL,
     MIN_WASHER_POLL_INTERVAL,
 )
-from .pyhisenseapi import HiSenseAC, HiSenseDryer, HiSenseFridge, HiSenseWasher
+from .pyhisenseapi import (
+    HiSenseAC,
+    HiSenseDryer,
+    HiSenseFridge,
+    HiSenseWasher,
+    HiSenseTV,
+    HiSenseOven,
+    HiSenseDishwasher,
+    HiSenseWaterHeater,
+    HiSenseHood,
+    HiSenseStove,
+    HiSenseDehumidifier,
+    HiSenseFreshAir,
+    HiSenseWineCabinet,
+    _HiSenseDevice,
+)
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -39,7 +54,7 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def __init__(
         self,
         hass: HomeAssistant,
-        client: HiSenseAC | HiSenseDryer | HiSenseFridge | HiSenseWasher,
+        client: _HiSenseDevice,
         device_type: str = "空调",
         entry=None,
     ) -> None:
@@ -58,7 +73,7 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         initial_interval = (
             timedelta(seconds=_FRIDGE_SCAN_INTERVAL)
-            if device_type == "冰箱"
+            if device_type in ("冰箱", "酒柜")
             else None
         )
 
@@ -221,24 +236,24 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Process status updates, manage App countdown timer, and adjust polling interval."""
         self._check_washer_completion(status)
 
-        if self.device_type not in ("洗衣机", "干衣机"):
+        if self.device_type not in ("洗衣机", "干衣机", "洗碗机", "烤箱"):
             return
 
-        is_running = bool(status.get("is_running") or status.get("machine_state") == "running")
+        is_running = bool(status.get("is_running") or status.get("machine_state") in ("running", "preheating", "storing"))
         is_complete = (
             status.get("machine_state") == "complete"
-            or status.get("run_status") == 7
-            or status.get("phase") == 7
+            or status.get("run_status") in (4, 7)
+            or status.get("phase") in (4, 7)
         )
 
         if is_running and not is_complete:
             # 1. 启动类似海信 App 的本地倒计时模式 (_startTimeUpdateMode)
             self._start_app_countdown(status)
 
-            # 2. 检查用户是否开启了洗涤中动态轮询
+            # 2. 检查用户是否开启了洗涤/运行中动态轮询
             options = self._entry.options if self._entry else {}
             enable_poll = options.get(CONF_ENABLE_WASHER_POLL, DEFAULT_ENABLE_WASHER_POLL)
-            if enable_poll:
+            if enable_poll and self.device_type in ("洗衣机", "干衣机"):
                 poll_interval = options.get(CONF_WASHER_POLL_INTERVAL, DEFAULT_WASHER_POLL_INTERVAL)
                 safe_interval = max(MIN_WASHER_POLL_INTERVAL, int(poll_interval))
                 new_interval = timedelta(minutes=safe_interval)
@@ -267,22 +282,34 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 )
 
     def _check_washer_completion(self, status: dict[str, Any]) -> None:
-        """Trigger completion notification when washer finishes cycle."""
-        if self.device_type not in ("洗衣机", "干衣机"):
+        """Trigger completion notification when cycle finishes."""
+        if self.device_type not in ("洗衣机", "干衣机", "洗碗机", "烤箱"):
             return
-        is_running = bool(status.get("is_running") or status.get("machine_state") == "running")
+        is_running = bool(status.get("is_running") or status.get("machine_state") in ("running", "preheating"))
         is_complete = (
             status.get("machine_state") == "complete"
-            or status.get("run_status") == 7
-            or status.get("phase") == 7
+            or status.get("run_status") in (4, 7)
+            or status.get("phase") in (4, 7)
         )
 
         if getattr(self, "_was_running", False) and is_complete:
             self._was_running = False
             dev_name = getattr(self.client, "device_name", self.device_type)
             now_str = dt_util.now().strftime("%Y-%m-%d %H:%M:%S")
+            action_desc = {
+                "洗衣机": "洗涤",
+                "干衣机": "烘干",
+                "洗碗机": "洗碗",
+                "烤箱": "烹饪",
+            }.get(self.device_type, "运行")
+            event_type = {
+                "洗衣机": "washer",
+                "干衣机": "dryer",
+                "洗碗机": "dishwasher",
+                "烤箱": "oven",
+            }.get(self.device_type, "device")
             self.hass.bus.async_fire(
-                "hisense_washer_complete",
+                f"hisense_{event_type}_complete",
                 {
                     "device_id": str(self.client.device_id),
                     "device_name": dev_name,
@@ -294,9 +321,9 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             persistent_notification.async_create(
                 self.hass,
-                f"【{dev_name}】洗涤完成！\n时间：{now_str}",
+                f"【{dev_name}】{action_desc}完成！\n时间：{now_str}",
                 title=f"海信智慧家 - {self.device_type}完成提醒",
-                notification_id=f"hisense_washer_complete_{self.client.device_id}",
+                notification_id=f"hisense_{event_type}_complete_{self.client.device_id}",
             )
         elif is_running:
             self._was_running = True

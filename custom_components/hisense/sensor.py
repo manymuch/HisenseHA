@@ -227,6 +227,218 @@ FRIDGE_SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
     ),
 )
 
+OVEN_SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
+    SensorEntityDescription(
+        key="real_temperature",
+        translation_key="oven_real_temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:thermometer",
+    ),
+    SensorEntityDescription(
+        key="target_temperature",
+        translation_key="oven_target_temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        icon="mdi:thermometer-chevron-up",
+    ),
+    SensorEntityDescription(
+        key="cook_time",
+        translation_key="oven_cook_time",
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        device_class=SensorDeviceClass.DURATION,
+        icon="mdi:timer-outline",
+    ),
+    SensorEntityDescription(
+        key="remaining_minutes",
+        translation_key="oven_remaining_minutes",
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        device_class=SensorDeviceClass.DURATION,
+        icon="mdi:progress-clock",
+    ),
+    SensorEntityDescription(
+        key="probe_temperature",
+        translation_key="oven_probe_temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:thermometer-probe",
+    ),
+    SensorEntityDescription(
+        key="run_status_label",
+        translation_key="oven_run_status",
+        icon="mdi:information-outline",
+    ),
+    SensorEntityDescription(
+        key="work_mode_label",
+        translation_key="oven_work_mode",
+        icon="mdi:stove",
+    ),
+)
+
+DISHWASHER_SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
+    SensorEntityDescription(
+        key="phase_label",
+        translation_key="dishwasher_phase",
+        icon="mdi:dishwasher",
+    ),
+    SensorEntityDescription(
+        key="work_mode_label",
+        translation_key="dishwasher_work_mode",
+        icon="mdi:tune",
+    ),
+    SensorEntityDescription(
+        key="remaining_minutes",
+        translation_key="dishwasher_remaining_minutes",
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        device_class=SensorDeviceClass.DURATION,
+        icon="mdi:progress-clock",
+    ),
+)
+
+WATER_HEATER_SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
+    SensorEntityDescription(
+        key="real_temperature",
+        translation_key="water_heater_real_temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:thermometer-water",
+    ),
+    SensorEntityDescription(
+        key="target_temperature",
+        translation_key="water_heater_target_temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        icon="mdi:thermometer-chevron-up",
+    ),
+    SensorEntityDescription(
+        key="hot_water_quantity",
+        translation_key="water_heater_hot_water_quantity",
+        icon="mdi:water-percent",
+    ),
+)
+
+HOOD_SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
+    SensorEntityDescription(
+        key="fan_speed_label",
+        translation_key="hood_fan_speed",
+        icon="mdi:fan",
+    ),
+    SensorEntityDescription(
+        key="delay_off_remain_time",
+        translation_key="hood_delay_off_remain_time",
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        device_class=SensorDeviceClass.DURATION,
+        icon="mdi:timer-sand",
+    ),
+)
+
+STOVE_SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
+    SensorEntityDescription(
+        key="left_fire_power",
+        translation_key="stove_left_fire_power",
+        icon="mdi:fire",
+    ),
+    SensorEntityDescription(
+        key="right_fire_power",
+        translation_key="stove_right_fire_power",
+        icon="mdi:fire",
+    ),
+    SensorEntityDescription(
+        key="left_timer",
+        translation_key="stove_left_timer",
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        device_class=SensorDeviceClass.DURATION,
+        icon="mdi:timer-outline",
+    ),
+    SensorEntityDescription(
+        key="right_timer",
+        translation_key="stove_right_timer",
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        device_class=SensorDeviceClass.DURATION,
+        icon="mdi:timer-outline",
+    ),
+)
+
+DEHUMIDIFIER_SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
+    SensorEntityDescription(
+        key="real_humidity",
+        translation_key="dehumidifier_real_humidity",
+        native_unit_of_measurement="%",
+        device_class=SensorDeviceClass.HUMIDITY,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:water-percent",
+    ),
+    SensorEntityDescription(
+        key="target_humidity",
+        translation_key="dehumidifier_target_humidity",
+        native_unit_of_measurement="%",
+        device_class=SensorDeviceClass.HUMIDITY,
+        icon="mdi:water-percent",
+    ),
+    SensorEntityDescription(
+        key="work_mode_label",
+        translation_key="dehumidifier_work_mode",
+        icon="mdi:tune",
+    ),
+)
+
+FRESH_AIR_SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
+    SensorEntityDescription(
+        key="fan_speed",
+        translation_key="fresh_air_fan_speed",
+        icon="mdi:fan",
+    ),
+    SensorEntityDescription(
+        key="work_mode_label",
+        translation_key="fresh_air_work_mode",
+        icon="mdi:air-filter",
+    ),
+)
+
+WINE_CABINET_SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
+    SensorEntityDescription(
+        key="zone1_real_temperature",
+        translation_key="wine_cabinet_zone1_real_temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:thermometer",
+    ),
+    SensorEntityDescription(
+        key="zone1_target_temperature",
+        translation_key="wine_cabinet_zone1_target_temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        icon="mdi:thermometer-chevron-up",
+    ),
+    SensorEntityDescription(
+        key="zone2_real_temperature",
+        translation_key="wine_cabinet_zone2_real_temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:thermometer",
+    ),
+    SensorEntityDescription(
+        key="zone2_target_temperature",
+        translation_key="wine_cabinet_zone2_target_temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        icon="mdi:thermometer-chevron-up",
+    ),
+    SensorEntityDescription(
+        key="humidity",
+        translation_key="wine_cabinet_humidity",
+        native_unit_of_measurement="%",
+        device_class=SensorDeviceClass.HUMIDITY,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:water-percent",
+    ),
+)
+
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     coordinators = hass.data[DOMAIN][config_entry.entry_id]
@@ -285,6 +497,46 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         HisenseTVSensor(coordinator, description)
         for coordinator in tv_coordinators
         for description in TV_SENSOR_DESCRIPTIONS
+    )
+
+    oven_coordinators = [c for c in coordinators.values() if getattr(c, "device_type", None) == "烤箱"]
+    async_add_entities(
+        HisenseApplianceSensor(c, d) for c in oven_coordinators for d in OVEN_SENSOR_DESCRIPTIONS
+    )
+
+    dishwasher_coordinators = [c for c in coordinators.values() if getattr(c, "device_type", None) == "洗碗机"]
+    async_add_entities(
+        HisenseApplianceSensor(c, d) for c in dishwasher_coordinators for d in DISHWASHER_SENSOR_DESCRIPTIONS
+    )
+
+    water_heater_coordinators = [c for c in coordinators.values() if getattr(c, "device_type", None) == "热水器"]
+    async_add_entities(
+        HisenseApplianceSensor(c, d) for c in water_heater_coordinators for d in WATER_HEATER_SENSOR_DESCRIPTIONS
+    )
+
+    hood_coordinators = [c for c in coordinators.values() if getattr(c, "device_type", None) == "油烟机"]
+    async_add_entities(
+        HisenseApplianceSensor(c, d) for c in hood_coordinators for d in HOOD_SENSOR_DESCRIPTIONS
+    )
+
+    stove_coordinators = [c for c in coordinators.values() if getattr(c, "device_type", None) == "燃气灶"]
+    async_add_entities(
+        HisenseApplianceSensor(c, d) for c in stove_coordinators for d in STOVE_SENSOR_DESCRIPTIONS
+    )
+
+    dehumidifier_coordinators = [c for c in coordinators.values() if getattr(c, "device_type", None) == "除湿机"]
+    async_add_entities(
+        HisenseApplianceSensor(c, d) for c in dehumidifier_coordinators for d in DEHUMIDIFIER_SENSOR_DESCRIPTIONS
+    )
+
+    fresh_air_coordinators = [c for c in coordinators.values() if getattr(c, "device_type", None) == "新风系统"]
+    async_add_entities(
+        HisenseApplianceSensor(c, d) for c in fresh_air_coordinators for d in FRESH_AIR_SENSOR_DESCRIPTIONS
+    )
+
+    wine_coordinators = [c for c in coordinators.values() if getattr(c, "device_type", None) == "酒柜"]
+    async_add_entities(
+        HisenseApplianceSensor(c, d) for c in wine_coordinators for d in WINE_CABINET_SENSOR_DESCRIPTIONS
     )
 
     valid_coordinators = [
@@ -562,3 +814,18 @@ class HisensePushMessageSensor(HisenseEntity, SensorEntity):
                 "raw_payload": push_info.get("raw"),
             })
         return attrs
+
+
+class HisenseApplianceSensor(HisenseEntity, SensorEntity):
+    """通用家电传感器实体（蒸烤箱/洗碗机/热水器/油烟机/燃气灶/除湿机/新风/酒柜）."""
+
+    entity_description: SensorEntityDescription
+
+    def __init__(self, coordinator, description: SensorEntityDescription):
+        super().__init__(coordinator, description.key, description.key, description.icon)
+        self.entity_description = description
+
+    @property
+    def native_value(self):
+        return self.status.get(self.entity_description.key)
+

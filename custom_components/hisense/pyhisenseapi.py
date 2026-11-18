@@ -300,12 +300,28 @@ def _device_type_from_name(device_type_name) -> str | None:
         return "空调"
     if "refrigerat" in text or "fridge" in text or "冰箱" in text:
         return "冰箱"
-    if "washer" in text or "washing" in text or "洗衣" in text:
-        return "洗衣机"
-    if "dryer" in text or "干衣" in text or "烘干" in text:
+    if "dryer" in text or "干衣" in text:
         return "干衣机"
+    if "washer" in text or "washing" in text or "洗衣" in text or "烘干" in text:
+        return "洗衣机"
     if "tv" in text or "television" in text or "电视" in text:
         return "电视"
+    if "oven" in text or "烤箱" in text or "微蒸烤" in text or "蒸箱" in text:
+        return "烤箱"
+    if "dishwasher" in text or "洗碗" in text:
+        return "洗碗机"
+    if "waterheater" in text or "water_heater" in text or "heater" in text or "热水器" in text:
+        return "热水器"
+    if "greasepump" in text or "hood" in text or "油烟机" in text or "烟机" in text:
+        return "油烟机"
+    if "stove" in text or "燃气灶" in text or "灶具" in text:
+        return "燃气灶"
+    if "dehumidifier" in text or "除湿" in text:
+        return "除湿机"
+    if "freshairsystem" in text or "fresh_air" in text or "新风" in text:
+        return "新风系统"
+    if "winecabinet" in text or "wine_cabinet" in text or "酒柜" in text:
+        return "酒柜"
     return None
 
 
@@ -2448,4 +2464,833 @@ class HiSenseTV(_HiSenseDevice):
 
     def get_status(self):
         return json.loads(json.dumps(self.status))
+
+
+# ============================================================================
+# 新增家电设备分类定义与控制服务
+# 涵盖：蒸烤箱、洗碗机、热水器、吸油烟机、燃气灶、除湿机、新风系统、酒柜
+# ============================================================================
+
+OVEN_MODE_MAP = {
+    "热风对流": 1,
+    "纯烘烤": 2,
+    "烧烤": 3,
+    "纯蒸汽": 4,
+    "蒸烤模式": 5,
+    "发酵": 6,
+    "解冻": 7,
+    "保温": 8,
+    "空气炸": 9,
+}
+OVEN_MODE_REVERSE_MAP = {v: k for k, v in OVEN_MODE_MAP.items()}
+
+OVEN_RUN_STATUS_MAP = {
+    0: "待机",
+    1: "预热中",
+    2: "烹饪中",
+    3: "暂停",
+    4: "完成",
+    7: "完成",
+}
+
+DISHWASHER_PROGRAM_MAP = {
+    "标准洗": 1,
+    "强力洗": 2,
+    "节能洗": 3,
+    "快速洗": 4,
+    "晶亮洗": 5,
+    "智能洗": 6,
+    "自清洁": 7,
+    "单烘干": 8,
+}
+DISHWASHER_PROGRAM_REVERSE_MAP = {v: k for k, v in DISHWASHER_PROGRAM_MAP.items()}
+
+DISHWASHER_RUN_STATUS_MAP = {
+    0: "待机",
+    1: "预洗",
+    2: "主洗",
+    3: "漂洗",
+    4: "烘干",
+    5: "抑菌存储",
+    7: "完成",
+}
+
+HOOD_SPEED_MAP = {
+    "关": 0,
+    "低速": 1,
+    "中速": 2,
+    "高速": 3,
+    "爆炒": 4,
+}
+HOOD_SPEED_REVERSE_MAP = {v: k for k, v in HOOD_SPEED_MAP.items()}
+
+DEHUMIDIFIER_MODE_MAP = {
+    "连续除湿": 1,
+    "舒适除湿": 2,
+    "干衣模式": 3,
+}
+DEHUMIDIFIER_MODE_REVERSE_MAP = {v: k for k, v in DEHUMIDIFIER_MODE_MAP.items()}
+
+FRESH_AIR_MODE_MAP = {
+    "智能": 1,
+    "普通": 2,
+    "除醛": 3,
+}
+FRESH_AIR_MODE_REVERSE_MAP = {v: k for k, v in FRESH_AIR_MODE_MAP.items()}
+
+
+class HiSenseOven(_HiSenseDevice):
+    """海信智能蒸烤箱 / 烤箱 / 微蒸烤一体机客户端."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.status = {
+            "power_on": False,
+            "is_running": False,
+            "machine_state": "off",
+            "run_status": 0,
+            "run_status_label": "关机",
+            "work_mode": 1,
+            "work_mode_label": "热风对流",
+            "target_temperature": 180,
+            "real_temperature": None,
+            "cook_time": 30,
+            "remaining_minutes": 0,
+            "probe_temperature": None,
+            "door_open": False,
+            "water_box_lack": False,
+            "child_lock": False,
+        }
+
+    def _update_from_states(self, states: dict):
+        def _flag(key):
+            val = states.get(key)
+            return None if val in (None, "--") else _as_bool(val)
+
+        power_on = _flag("powerStatus")
+        run_status_raw = _as_int(states.get("runStatus"))
+        start_stop_raw = _as_int(states.get("startStop"))
+
+        if power_on is None:
+            machine_state = None
+            is_running = False
+        elif not power_on:
+            machine_state = "off"
+            is_running = False
+        elif run_status_raw in (4, 7):
+            machine_state = "complete"
+            is_running = False
+        elif run_status_raw == 3:
+            machine_state = "paused"
+            is_running = False
+        elif run_status_raw == 1:
+            machine_state = "preheating"
+            is_running = True
+        elif start_stop_raw == 1 or run_status_raw == 2:
+            machine_state = "running"
+            is_running = True
+        else:
+            machine_state = "standby"
+            is_running = False
+
+        status_label = OVEN_RUN_STATUS_MAP.get(run_status_raw, "关机" if not power_on else "待机")
+        mode_val = _as_int(states.get("workMode"))
+        mode_label = OVEN_MODE_REVERSE_MAP.get(mode_val, f"模式{mode_val}" if mode_val else "烘烤")
+
+        updates = {
+            "power_on": power_on,
+            "is_running": is_running,
+            "machine_state": machine_state,
+            "run_status": run_status_raw,
+            "run_status_label": status_label,
+            "work_mode": mode_val,
+            "work_mode_label": mode_label,
+            "target_temperature": _as_int(states.get("setTemperature")),
+            "real_temperature": _as_int(states.get("realTemperature")),
+            "cook_time": _as_int(states.get("cookTime")),
+            "remaining_minutes": _as_int(states.get("remainRunTime")),
+            "probe_temperature": _as_int(states.get("probeTemperature")),
+            "door_open": _flag("doorOpenStatus") or _flag("doorLockStatus"),
+            "water_box_lack": _flag("waterBoxStatus"),
+            "child_lock": _flag("childLock"),
+        }
+        updates = {k: v for k, v in updates.items() if v is not None}
+        self._store_states(updates, states)
+        return set(updates)
+
+    async def turn_on(self):
+        ok = await self._send_aihome_action(
+            "connector.device.command.Power",
+            {"onAndOff": {"code": "On"}},
+            source_name=self.POWER_SOURCE_NAME,
+        )
+        if ok:
+            self._set_pending_status({"power_on": True, "machine_state": "standby", "run_status_label": "待机"})
+        return ok
+
+    async def turn_off(self):
+        ok = await self._send_aihome_action(
+            "connector.device.command.Power",
+            {"onAndOff": {"code": "Off"}},
+            source_name=self.POWER_SOURCE_NAME,
+        )
+        if ok:
+            self._set_pending_status({"power_on": False, "is_running": False, "machine_state": "off", "run_status_label": "关机"})
+        return ok
+
+    async def start_pause(self, running: bool):
+        val = 1 if running else 0
+        ok = await self._send_aihome_action(
+            "connector.device.command.StartStop",
+            {"startStop": {"value": val}},
+        )
+        if ok:
+            self._set_pending_status({
+                "is_running": bool(running),
+                "machine_state": "running" if running else "paused",
+                "run_status_label": "烹饪中" if running else "暂停",
+            })
+        return ok
+
+    async def cancel_running(self):
+        ok = await self._send_aihome_action(
+            "connector.device.command.cancelCurrentRunningState",
+            {"cancelRunning": {"value": 1}},
+        )
+        if ok:
+            self._set_pending_status({"is_running": False, "machine_state": "standby", "run_status_label": "待机"})
+        return ok
+
+    async def set_temperature(self, temp: int):
+        ok = await self._send_aihome_action(
+            "connector.device.command.SetTemperature",
+            {"setTemperature": {"value": int(temp)}},
+        )
+        if ok:
+            self._set_pending_status({"target_temperature": int(temp)})
+        return ok
+
+    async def set_cook_time(self, minutes: int):
+        ok = await self._send_aihome_action(
+            "connector.device.command.CookTime",
+            {"cookTime": {"value": int(minutes)}},
+        )
+        if ok:
+            self._set_pending_status({"cook_time": int(minutes)})
+        return ok
+
+    async def set_mode(self, mode_id: int):
+        ok = await self._send_aihome_action(
+            "connector.device.command.SetModes",
+            {"modes": {"value": int(mode_id)}},
+        )
+        if ok:
+            self._set_pending_status({
+                "work_mode": int(mode_id),
+                "work_mode_label": OVEN_MODE_REVERSE_MAP.get(int(mode_id), f"模式{mode_id}"),
+            })
+        return ok
+
+    async def set_child_lock(self, enabled: bool):
+        ok = await self._send_aihome_action(
+            "connector.device.command.ChildLock",
+            {"childLock": {"value": int(enabled)}},
+        )
+        if ok:
+            self._set_pending_status({"child_lock": bool(enabled)})
+        return ok
+
+    def get_status(self):
+        return json.loads(json.dumps(self.status))
+
+
+class HiSenseDishwasher(_HiSenseDevice):
+    """海信智能洗碗机客户端."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.status = {
+            "power_on": False,
+            "is_running": False,
+            "machine_state": "off",
+            "run_status": 0,
+            "phase_label": "关机",
+            "work_mode": 1,
+            "work_mode_label": "标准洗",
+            "remaining_minutes": 0,
+            "child_lock": False,
+            "salt_lack": False,
+            "rinse_aid_lack": False,
+            "door_open": False,
+        }
+
+    def _update_from_states(self, states: dict):
+        def _flag(key):
+            val = states.get(key)
+            return None if val in (None, "--") else _as_bool(val)
+
+        power_on = _flag("powerStatus")
+        run_status_raw = _as_int(states.get("runStatus"))
+        start_stop_raw = _as_int(states.get("startStop"))
+        start_pause_raw = _as_int(states.get("startPauseStatus"))
+
+        if power_on is None:
+            machine_state = None
+            is_running = False
+        elif not power_on:
+            machine_state = "off"
+            is_running = False
+        elif run_status_raw == 7:
+            machine_state = "complete"
+            is_running = False
+        elif run_status_raw == 5:
+            machine_state = "storing"
+            is_running = True
+        elif start_pause_raw == 1:
+            machine_state = "paused"
+            is_running = False
+        elif start_stop_raw == 1 or (run_status_raw is not None and run_status_raw in (1, 2, 3, 4)):
+            machine_state = "running"
+            is_running = True
+        else:
+            machine_state = "standby"
+            is_running = False
+
+        phase_label = DISHWASHER_RUN_STATUS_MAP.get(run_status_raw, "关机" if not power_on else "待机")
+        mode_val = _as_int(states.get("workMode"))
+        mode_label = DISHWASHER_PROGRAM_REVERSE_MAP.get(mode_val, f"程序{mode_val}" if mode_val else "标准洗")
+
+        updates = {
+            "power_on": power_on,
+            "is_running": is_running,
+            "machine_state": machine_state,
+            "run_status": run_status_raw,
+            "phase_label": phase_label,
+            "work_mode": mode_val,
+            "work_mode_label": mode_label,
+            "remaining_minutes": _as_int(states.get("remainRunTime")),
+            "child_lock": _flag("childLock"),
+            "salt_lack": _flag("saltLackStatus"),
+            "rinse_aid_lack": _flag("rinseAidLackStatus"),
+            "door_open": _flag("doorOpenStatus"),
+        }
+        updates = {k: v for k, v in updates.items() if v is not None}
+        self._store_states(updates, states)
+        return set(updates)
+
+    async def turn_on(self):
+        ok = await self._send_aihome_action(
+            "connector.device.command.Power",
+            {"onAndOff": {"code": "On"}},
+            source_name=self.POWER_SOURCE_NAME,
+        )
+        if ok:
+            self._set_pending_status({"power_on": True, "machine_state": "standby", "phase_label": "待机"})
+        return ok
+
+    async def turn_off(self):
+        ok = await self._send_aihome_action(
+            "connector.device.command.Power",
+            {"onAndOff": {"code": "Off"}},
+            source_name=self.POWER_SOURCE_NAME,
+        )
+        if ok:
+            self._set_pending_status({"power_on": False, "is_running": False, "machine_state": "off", "phase_label": "关机"})
+        return ok
+
+    async def start_pause(self, running: bool):
+        val = 1 if running else 0
+        ok = await self._send_aihome_action(
+            "connector.device.command.StartStop",
+            {"startStop": {"value": val}},
+        )
+        if ok:
+            self._set_pending_status({
+                "is_running": bool(running),
+                "machine_state": "running" if running else "paused",
+                "phase_label": "运行中" if running else "暂停",
+            })
+        return ok
+
+    async def set_program(self, mode_id: int):
+        ok = await self._send_aihome_action(
+            "connector.device.command.SetModes",
+            {"modes": {"value": int(mode_id)}},
+        )
+        if ok:
+            self._set_pending_status({
+                "work_mode": int(mode_id),
+                "work_mode_label": DISHWASHER_PROGRAM_REVERSE_MAP.get(int(mode_id), f"程序{mode_id}"),
+            })
+        return ok
+
+    async def set_child_lock(self, enabled: bool):
+        ok = await self._send_aihome_action(
+            "connector.device.command.ChildLock",
+            {"childLock": {"value": int(enabled)}},
+        )
+        if ok:
+            self._set_pending_status({"child_lock": bool(enabled)})
+        return ok
+
+    def get_status(self):
+        return json.loads(json.dumps(self.status))
+
+
+class HiSenseWaterHeater(_HiSenseDevice):
+    """海信智能热水器（电热水器 / 燃气热水器）客户端."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.status = {
+            "power_on": False,
+            "target_temperature": 55,
+            "real_temperature": None,
+            "heating": False,
+            "hot_water_quantity": None,
+            "is_gas": False,
+        }
+
+    def _update_from_states(self, states: dict):
+        def _flag(key):
+            val = states.get(key)
+            return None if val in (None, "--") else _as_bool(val)
+
+        power_on = _flag("powerStatus")
+        target_temp = _as_int(states.get("setTemperature") or states.get("setWaterTemperature"))
+        real_temp = _as_int(states.get("realWaterTemperature") or states.get("realTemperature"))
+        heating = _flag("heatingStatus") or (
+            power_on and real_temp is not None and target_temp is not None and real_temp < target_temp
+        )
+
+        updates = {
+            "power_on": power_on,
+            "target_temperature": target_temp,
+            "real_temperature": real_temp,
+            "heating": heating,
+            "hot_water_quantity": _as_int(states.get("hotWaterQuantity")),
+            "is_gas": "gas" in str(self.device_name or "").lower(),
+        }
+        updates = {k: v for k, v in updates.items() if v is not None}
+        self._store_states(updates, states)
+        return set(updates)
+
+    async def turn_on(self):
+        ok = await self._send_aihome_action(
+            "connector.device.command.Power",
+            {"onAndOff": {"code": "On"}},
+            source_name=self.POWER_SOURCE_NAME,
+        )
+        if ok:
+            self._set_pending_status({"power_on": True})
+        return ok
+
+    async def turn_off(self):
+        ok = await self._send_aihome_action(
+            "connector.device.command.Power",
+            {"onAndOff": {"code": "Off"}},
+            source_name=self.POWER_SOURCE_NAME,
+        )
+        if ok:
+            self._set_pending_status({"power_on": False, "heating": False})
+        return ok
+
+    async def set_temperature(self, temp: int):
+        ok = await self._send_aihome_action(
+            "connector.device.command.SetTemperature",
+            {"setTemperature": {"value": int(temp)}},
+        )
+        if ok:
+            self._set_pending_status({"target_temperature": int(temp)})
+        return ok
+
+    def get_status(self):
+        return json.loads(json.dumps(self.status))
+
+
+class HiSenseHood(_HiSenseDevice):
+    """海信智能吸油烟机客户端."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.status = {
+            "power_on": False,
+            "fan_speed": 0,
+            "fan_speed_label": "关",
+            "light_on": False,
+            "delay_off": False,
+            "delay_off_remain_time": 0,
+            "smart_ventilate": False,
+        }
+
+    def _update_from_states(self, states: dict):
+        def _flag(key):
+            val = states.get(key)
+            return None if val in (None, "--") else _as_bool(val)
+
+        power_on = _flag("powerStatus")
+        fan_speed_raw = _as_int(states.get("windSpeed") or states.get("gearControl")) or 0
+        speed_label = HOOD_SPEED_REVERSE_MAP.get(fan_speed_raw, f"{fan_speed_raw}挡")
+
+        updates = {
+            "power_on": power_on,
+            "fan_speed": fan_speed_raw,
+            "fan_speed_label": speed_label,
+            "light_on": _flag("lightSwitch") or _flag("lightSwitchControl"),
+            "delay_off": _flag("delayOffSwitch"),
+            "delay_off_remain_time": _as_int(states.get("delayOffRemainTime")),
+            "smart_ventilate": _flag("smartVentilateMode"),
+        }
+        updates = {k: v for k, v in updates.items() if v is not None}
+        self._store_states(updates, states)
+        return set(updates)
+
+    async def turn_on(self):
+        ok = await self._send_aihome_action(
+            "connector.device.command.Power",
+            {"onAndOff": {"code": "On"}},
+            source_name=self.POWER_SOURCE_NAME,
+        )
+        if ok:
+            self._set_pending_status({"power_on": True})
+        return ok
+
+    async def turn_off(self):
+        ok = await self._send_aihome_action(
+            "connector.device.command.Power",
+            {"onAndOff": {"code": "Off"}},
+            source_name=self.POWER_SOURCE_NAME,
+        )
+        if ok:
+            self._set_pending_status({"power_on": False, "fan_speed": 0, "fan_speed_label": "关"})
+        return ok
+
+    async def set_fan_speed(self, speed: int):
+        ok = await self._send_aihome_action(
+            "connector.device.function.WindSpeed",
+            {"windSpeed": {"value": int(speed)}},
+        )
+        if ok:
+            self._set_pending_status({
+                "power_on": int(speed) > 0,
+                "fan_speed": int(speed),
+                "fan_speed_label": HOOD_SPEED_REVERSE_MAP.get(int(speed), f"{speed}挡"),
+            })
+        return ok
+
+    async def set_light(self, on: bool):
+        ok = await self._send_aihome_action(
+            "connector.device.function.LightSwitchControl",
+            {"lightSwitch": {"value": 1 if on else 0}},
+        )
+        if ok:
+            self._set_pending_status({"light_on": bool(on)})
+        return ok
+
+    async def set_delay_off(self, enabled: bool):
+        ok = await self._send_aihome_action(
+            "connector.device.command.SetDelayOffSwitch",
+            {"delayOff": {"value": 1 if enabled else 0}},
+        )
+        if ok:
+            self._set_pending_status({"delay_off": bool(enabled)})
+        return ok
+
+    def get_status(self):
+        return json.loads(json.dumps(self.status))
+
+
+class HiSenseStove(_HiSenseDevice):
+    """海信智能燃气灶（安全只读监控客户端）."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.status = {
+            "power_on": False,
+            "left_fire_power": 0,
+            "right_fire_power": 0,
+            "left_timer": 0,
+            "right_timer": 0,
+        }
+
+    def _update_from_states(self, states: dict):
+        def _flag(key):
+            val = states.get(key)
+            return None if val in (None, "--") else _as_bool(val)
+
+        left_fire = _as_int(states.get("firePower.left") or states.get("leftFirePower")) or 0
+        right_fire = _as_int(states.get("firePower.right") or states.get("rightFirePower")) or 0
+
+        updates = {
+            "power_on": _flag("powerStatus") or (left_fire > 0 or right_fire > 0),
+            "left_fire_power": left_fire,
+            "right_fire_power": right_fire,
+            "left_timer": _as_int(states.get("orderTime.left") or states.get("leftOrderTime")) or 0,
+            "right_timer": _as_int(states.get("orderTime.right") or states.get("rightOrderTime")) or 0,
+        }
+        updates = {k: v for k, v in updates.items() if v is not None}
+        self._store_states(updates, states)
+        return set(updates)
+
+    def get_status(self):
+        return json.loads(json.dumps(self.status))
+
+
+class HiSenseDehumidifier(_HiSenseDevice):
+    """海信智能除湿机客户端."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.status = {
+            "power_on": False,
+            "target_humidity": 50,
+            "real_humidity": None,
+            "fan_speed": 1,
+            "work_mode": 1,
+            "work_mode_label": "舒适除湿",
+            "water_full": False,
+            "child_lock": False,
+        }
+
+    def _update_from_states(self, states: dict):
+        def _flag(key):
+            val = states.get(key)
+            return None if val in (None, "--") else _as_bool(val)
+
+        mode_val = _as_int(states.get("modes"))
+        mode_label = DEHUMIDIFIER_MODE_REVERSE_MAP.get(mode_val, "舒适除湿")
+
+        updates = {
+            "power_on": _flag("powerStatus"),
+            "target_humidity": _as_int(states.get("targetHumidity") or states.get("setHumidity")),
+            "real_humidity": _as_int(states.get("realHumidity") or states.get("humidity")),
+            "fan_speed": _as_int(states.get("windSpeed")),
+            "work_mode": mode_val,
+            "work_mode_label": mode_label,
+            "water_full": _flag("waterFullStatus"),
+            "child_lock": _flag("childLock"),
+        }
+        updates = {k: v for k, v in updates.items() if v is not None}
+        self._store_states(updates, states)
+        return set(updates)
+
+    async def turn_on(self):
+        ok = await self._send_aihome_action(
+            "connector.device.command.Power",
+            {"onAndOff": {"code": "On"}},
+            source_name=self.POWER_SOURCE_NAME,
+        )
+        if ok:
+            self._set_pending_status({"power_on": True})
+        return ok
+
+    async def turn_off(self):
+        ok = await self._send_aihome_action(
+            "connector.device.command.Power",
+            {"onAndOff": {"code": "Off"}},
+            source_name=self.POWER_SOURCE_NAME,
+        )
+        if ok:
+            self._set_pending_status({"power_on": False})
+        return ok
+
+    async def set_target_humidity(self, humidity: int):
+        ok = await self._send_aihome_action(
+            "connector.device.function.Humidity",
+            {"targetHumidity": {"value": int(humidity)}},
+        )
+        if ok:
+            self._set_pending_status({"target_humidity": int(humidity)})
+        return ok
+
+    async def set_fan_speed(self, speed: int):
+        ok = await self._send_aihome_action(
+            "connector.device.function.WindSpeed",
+            {"windSpeed": {"value": int(speed)}},
+        )
+        if ok:
+            self._set_pending_status({"fan_speed": int(speed)})
+        return ok
+
+    async def set_mode(self, mode_id: int):
+        ok = await self._send_aihome_action(
+            "connector.device.command.SetModes",
+            {"modes": {"value": int(mode_id)}},
+        )
+        if ok:
+            self._set_pending_status({
+                "work_mode": int(mode_id),
+                "work_mode_label": DEHUMIDIFIER_MODE_REVERSE_MAP.get(int(mode_id), f"模式{mode_id}"),
+            })
+        return ok
+
+    async def set_child_lock(self, enabled: bool):
+        ok = await self._send_aihome_action(
+            "connector.device.command.ChildLock",
+            {"childLock": {"value": int(enabled)}},
+        )
+        if ok:
+            self._set_pending_status({"child_lock": bool(enabled)})
+        return ok
+
+    def get_status(self):
+        return json.loads(json.dumps(self.status))
+
+
+class HiSenseFreshAir(_HiSenseDevice):
+    """海信智能新风系统客户端."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.status = {
+            "power_on": False,
+            "fan_speed": 1,
+            "work_mode": 1,
+            "work_mode_label": "智能",
+        }
+
+    def _update_from_states(self, states: dict):
+        def _flag(key):
+            val = states.get(key)
+            return None if val in (None, "--") else _as_bool(val)
+
+        mode_val = _as_int(states.get("ventilationModes") or states.get("modes"))
+        updates = {
+            "power_on": _flag("powerStatus"),
+            "fan_speed": _as_int(states.get("ventilationWindSpeed") or states.get("windSpeed")),
+            "work_mode": mode_val,
+            "work_mode_label": FRESH_AIR_MODE_REVERSE_MAP.get(mode_val, "智能"),
+        }
+        updates = {k: v for k, v in updates.items() if v is not None}
+        self._store_states(updates, states)
+        return set(updates)
+
+    async def turn_on(self):
+        ok = await self._send_aihome_action(
+            "connector.device.command.Power",
+            {"onAndOff": {"code": "On"}},
+            source_name=self.POWER_SOURCE_NAME,
+        )
+        if ok:
+            self._set_pending_status({"power_on": True})
+        return ok
+
+    async def turn_off(self):
+        ok = await self._send_aihome_action(
+            "connector.device.command.Power",
+            {"onAndOff": {"code": "Off"}},
+            source_name=self.POWER_SOURCE_NAME,
+        )
+        if ok:
+            self._set_pending_status({"power_on": False})
+        return ok
+
+    async def set_fan_speed(self, speed: int):
+        ok = await self._send_aihome_action(
+            "connector.device.function.VentilationWindSpeed",
+            {"ventilationWindSpeed": {"value": int(speed)}},
+        )
+        if ok:
+            self._set_pending_status({"fan_speed": int(speed)})
+        return ok
+
+    async def set_mode(self, mode_id: int):
+        ok = await self._send_aihome_action(
+            "connector.device.function.VentilationModes",
+            {"ventilationModes": {"value": int(mode_id)}},
+        )
+        if ok:
+            self._set_pending_status({
+                "work_mode": int(mode_id),
+                "work_mode_label": FRESH_AIR_MODE_REVERSE_MAP.get(int(mode_id), f"模式{mode_id}"),
+            })
+        return ok
+
+    def get_status(self):
+        return json.loads(json.dumps(self.status))
+
+
+class HiSenseWineCabinet(_HiSenseDevice):
+    """海信智能酒柜客户端."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.status = {
+            "power_on": False,
+            "zone1_target_temperature": 12,
+            "zone1_real_temperature": None,
+            "zone2_target_temperature": 12,
+            "zone2_real_temperature": None,
+            "light_on": False,
+            "humidity": None,
+        }
+
+    def _update_from_states(self, states: dict):
+        def _flag(key):
+            val = states.get(key)
+            return None if val in (None, "--") else _as_bool(val)
+
+        updates = {
+            "power_on": _flag("powerStatus"),
+            "zone1_target_temperature": _as_int(states.get("temperatureControl.zone1") or states.get("setTemperature")),
+            "zone1_real_temperature": _as_int(states.get("realTemperature.zone1") or states.get("realTemperature")),
+            "zone2_target_temperature": _as_int(states.get("temperatureControl.zone2")),
+            "zone2_real_temperature": _as_int(states.get("realTemperature.zone2")),
+            "light_on": _flag("lightSwitch") or _flag("lightSwitchControl"),
+            "humidity": _as_int(states.get("humidity")),
+        }
+        updates = {k: v for k, v in updates.items() if v is not None}
+        self._store_states(updates, states)
+        return set(updates)
+
+    async def turn_on(self):
+        ok = await self._send_aihome_action(
+            "connector.device.command.Power",
+            {"onAndOff": {"code": "On"}},
+            source_name=self.POWER_SOURCE_NAME,
+        )
+        if ok:
+            self._set_pending_status({"power_on": True})
+        return ok
+
+    async def turn_off(self):
+        ok = await self._send_aihome_action(
+            "connector.device.command.Power",
+            {"onAndOff": {"code": "Off"}},
+            source_name=self.POWER_SOURCE_NAME,
+        )
+        if ok:
+            self._set_pending_status({"power_on": False})
+        return ok
+
+    async def set_zone1_temperature(self, temp: int):
+        ok = await self._send_aihome_action(
+            "connector.device.function.TemperatureControl.DualUnit.zone1",
+            {"setTemperature": {"value": int(temp)}},
+        )
+        if ok:
+            self._set_pending_status({"zone1_target_temperature": int(temp)})
+        return ok
+
+    async def set_zone2_temperature(self, temp: int):
+        ok = await self._send_aihome_action(
+            "connector.device.function.TemperatureControl.DualUnit.zone2",
+            {"setTemperature": {"value": int(temp)}},
+        )
+        if ok:
+            self._set_pending_status({"zone2_target_temperature": int(temp)})
+        return ok
+
+    async def set_light(self, on: bool):
+        ok = await self._send_aihome_action(
+            "connector.device.function.LightSwitchControl",
+            {"lightSwitch": {"value": 1 if on else 0}},
+        )
+        if ok:
+            self._set_pending_status({"light_on": bool(on)})
+        return ok
+
+    def get_status(self):
+        return json.loads(json.dumps(self.status))
+
 

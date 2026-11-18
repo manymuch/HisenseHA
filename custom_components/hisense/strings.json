@@ -149,6 +149,51 @@
       },
       "fridge_variation_power": {
         "name": "Variation zone switch"
+      },
+      "oven_power": {
+        "name": "Oven Power"
+      },
+      "oven_start_pause": {
+        "name": "Oven Start/Pause"
+      },
+      "oven_child_lock": {
+        "name": "Oven Child Lock"
+      },
+      "dishwasher_power": {
+        "name": "Dishwasher Power"
+      },
+      "dishwasher_start_pause": {
+        "name": "Dishwasher Start/Pause"
+      },
+      "dishwasher_child_lock": {
+        "name": "Dishwasher Child Lock"
+      },
+      "water_heater_power": {
+        "name": "Water Heater Power"
+      },
+      "hood_power": {
+        "name": "Hood Power"
+      },
+      "hood_light": {
+        "name": "Hood Light"
+      },
+      "hood_delay_off": {
+        "name": "Hood Delay Off"
+      },
+      "dehumidifier_power": {
+        "name": "Dehumidifier Power"
+      },
+      "dehumidifier_child_lock": {
+        "name": "Dehumidifier Child Lock"
+      },
+      "fresh_air_power": {
+        "name": "Fresh Air Power"
+      },
+      "wine_cabinet_power": {
+        "name": "Wine Cabinet Power"
+      },
+      "wine_cabinet_light": {
+        "name": "Wine Cabinet Light"
       }
     },
     "button": {
@@ -207,6 +252,24 @@
       },
       "fridge_freezer_target_temperature": {
         "name": "Set temperature - Freezer"
+      },
+      "oven_target_temperature": {
+        "name": "Oven Target Temperature"
+      },
+      "oven_cook_time": {
+        "name": "Oven Cook Time"
+      },
+      "water_heater_target_temperature": {
+        "name": "Water Heater Target Temperature"
+      },
+      "dehumidifier_target_humidity": {
+        "name": "Dehumidifier Target Humidity"
+      },
+      "wine_cabinet_zone1_target_temperature": {
+        "name": "Wine Cabinet Zone 1 Target Temperature"
+      },
+      "wine_cabinet_zone2_target_temperature": {
+        "name": "Wine Cabinet Zone 2 Target Temperature"
       }
     },
     "select": {
@@ -276,6 +339,21 @@
       },
       "dryer_program_select": {
         "name": "Dryer Program"
+      },
+      "oven_mode_select": {
+        "name": "Oven Mode"
+      },
+      "dishwasher_program_select": {
+        "name": "Dishwasher Program"
+      },
+      "hood_speed_select": {
+        "name": "Hood Speed"
+      },
+      "dehumidifier_mode_select": {
+        "name": "Dehumidifier Mode"
+      },
+      "fresh_air_mode_select": {
+        "name": "Fresh Air Mode"
       }
     },
     "sensor": {
@@ -430,6 +508,93 @@
       },
       "tv_last_key": {
         "name": "Last key"
+      },
+      "oven_real_temperature": {
+        "name": "Oven Real Temperature"
+      },
+      "oven_target_temperature": {
+        "name": "Oven Target Temperature"
+      },
+      "oven_cook_time": {
+        "name": "Oven Cook Time"
+      },
+      "oven_remaining_minutes": {
+        "name": "Oven Remaining Time"
+      },
+      "oven_probe_temperature": {
+        "name": "Oven Probe Temperature"
+      },
+      "oven_run_status": {
+        "name": "Oven Run Status"
+      },
+      "oven_work_mode": {
+        "name": "Oven Work Mode"
+      },
+      "dishwasher_phase": {
+        "name": "Dishwasher Phase"
+      },
+      "dishwasher_work_mode": {
+        "name": "Dishwasher Program"
+      },
+      "dishwasher_remaining_minutes": {
+        "name": "Dishwasher Remaining Time"
+      },
+      "water_heater_real_temperature": {
+        "name": "Water Heater Real Temperature"
+      },
+      "water_heater_target_temperature": {
+        "name": "Water Heater Target Temperature"
+      },
+      "water_heater_hot_water_quantity": {
+        "name": "Water Heater Hot Water Quantity"
+      },
+      "hood_fan_speed": {
+        "name": "Hood Fan Speed"
+      },
+      "hood_delay_off_remain_time": {
+        "name": "Hood Delay Off Remaining Time"
+      },
+      "stove_left_fire_power": {
+        "name": "Stove Left Fire Power"
+      },
+      "stove_right_fire_power": {
+        "name": "Stove Right Fire Power"
+      },
+      "stove_left_timer": {
+        "name": "Stove Left Timer"
+      },
+      "stove_right_timer": {
+        "name": "Stove Right Timer"
+      },
+      "dehumidifier_real_humidity": {
+        "name": "Dehumidifier Real Humidity"
+      },
+      "dehumidifier_target_humidity": {
+        "name": "Dehumidifier Target Humidity"
+      },
+      "dehumidifier_work_mode": {
+        "name": "Dehumidifier Work Mode"
+      },
+      "fresh_air_fan_speed": {
+        "name": "Fresh Air Fan Speed"
+      },
+      "fresh_air_work_mode": {
+        "name": "Fresh Air Work Mode"
+      },
+      "wine_cabinet_zone1_real_temperature": {
+        "name": "Wine Cabinet Zone 1 Real Temperature"
+      },
+      "wine_cabinet_zone1_target_temperature": {
+        "name": "Wine Cabinet Zone 1 Target Temperature"
+      },
+      "wine_cabinet_zone2_real_temperature": {
+        "name": "Wine Cabinet Zone 2 Real Temperature"
+      },
+      "wine_cabinet_zone2_target_temperature": {
+        "name": "Wine Cabinet Zone 2 Target Temperature"
+      },
+      "wine_cabinet_humidity": {
+        "name": "Wine Cabinet Humidity"
       }
     },
     "binary_sensor": {
@@ -516,6 +681,39 @@
       },
       "fridge_cleaner": {
         "name": "Odor removal"
+      },
+      "oven_power": {
+        "name": "Oven Power"
+      },
+      "oven_door_open": {
+        "name": "Oven Door"
+      },
+      "oven_water_box_lack": {
+        "name": "Oven Water Box Empty"
+      },
+      "dishwasher_power": {
+        "name": "Dishwasher Power"
+      },
+      "dishwasher_door_open": {
+        "name": "Dishwasher Door"
+      },
+      "dishwasher_salt_lack": {
+        "name": "Dishwasher Salt Lack"
+      },
+      "dishwasher_rinse_aid_lack": {
+        "name": "Dishwasher Rinse Aid Lack"
+      },
+      "water_heater_power": {
+        "name": "Water Heater Power"
+      },
+      "water_heater_heating": {
+        "name": "Water Heater Heating"
+      },
+      "dehumidifier_power": {
+        "name": "Dehumidifier Power"
+      },
+      "dehumidifier_water_full": {
+        "name": "Dehumidifier Water Full"
       }
     },
     "media_player": {

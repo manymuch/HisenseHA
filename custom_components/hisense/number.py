@@ -83,6 +83,34 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         for description in FRIDGE_TEMPERATURE_DESCRIPTIONS
     )
 
+    oven_coordinators = [c for c in coordinators.values() if c.device_type == "烤箱"]
+    oven_entities = []
+    for c in oven_coordinators:
+        oven_entities.extend([
+            HisenseOvenTargetTemperatureNumber(c),
+            HisenseOvenCookTimeNumber(c),
+        ])
+    if oven_entities:
+        async_add_entities(oven_entities)
+
+    water_heater_coordinators = [c for c in coordinators.values() if c.device_type == "热水器"]
+    if water_heater_coordinators:
+        async_add_entities([HisenseWaterHeaterTargetTemperatureNumber(c) for c in water_heater_coordinators])
+
+    dehumidifier_coordinators = [c for c in coordinators.values() if c.device_type == "除湿机"]
+    if dehumidifier_coordinators:
+        async_add_entities([HisenseDehumidifierTargetHumidityNumber(c) for c in dehumidifier_coordinators])
+
+    wine_coordinators = [c for c in coordinators.values() if c.device_type == "酒柜"]
+    wine_entities = []
+    for c in wine_coordinators:
+        wine_entities.extend([
+            HisenseWineCabinetZone1TemperatureNumber(c),
+            HisenseWineCabinetZone2TemperatureNumber(c),
+        ])
+    if wine_entities:
+        async_add_entities(wine_entities)
+
 
 class HisenseFridgeTemperatureNumber(HisenseEntity, NumberEntity):
     """Writable refrigerator / freezer target temperature."""
@@ -156,3 +184,153 @@ class HisenseClimateLimitNumber(HisenseEntity, NumberEntity):
                 self.client.climate_min_temp = self.client.climate_max_temp
         async_dispatcher_send(self.hass, climate_limits_signal(self.client.device_id))
         self.async_write_ha_state()
+
+
+class HisenseOvenTargetTemperatureNumber(HisenseEntity, NumberEntity):
+    _attr_translation_key = "oven_target_temperature"
+    _attr_native_min_value = 30
+    _attr_native_max_value = 250
+    _attr_native_step = 1
+    _attr_mode = NumberMode.BOX
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_icon = "mdi:thermometer-chevron-up"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "oven_target_temperature", "oven_target_temperature", "mdi:thermometer-chevron-up")
+
+    @property
+    def native_value(self) -> float | None:
+        val = self.status.get("target_temperature")
+        return float(val) if val is not None else None
+
+    async def async_set_native_value(self, value: float) -> None:
+        target = int(round(value))
+        if await self.client.set_temperature(target):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to set Hisense oven target temperature")
+
+
+class HisenseOvenCookTimeNumber(HisenseEntity, NumberEntity):
+    _attr_translation_key = "oven_cook_time"
+    _attr_native_min_value = 1
+    _attr_native_max_value = 180
+    _attr_native_step = 1
+    _attr_mode = NumberMode.BOX
+    _attr_native_unit_of_measurement = "min"
+    _attr_icon = "mdi:timer-outline"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "oven_cook_time", "oven_cook_time", "mdi:timer-outline")
+
+    @property
+    def native_value(self) -> float | None:
+        val = self.status.get("cook_time")
+        return float(val) if val is not None else None
+
+    async def async_set_native_value(self, value: float) -> None:
+        target = int(round(value))
+        if await self.client.set_cook_time(target):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to set Hisense oven cook time")
+
+
+class HisenseWaterHeaterTargetTemperatureNumber(HisenseEntity, NumberEntity):
+    _attr_translation_key = "water_heater_target_temperature"
+    _attr_native_min_value = 35
+    _attr_native_max_value = 75
+    _attr_native_step = 1
+    _attr_mode = NumberMode.BOX
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_icon = "mdi:thermometer-chevron-up"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "water_heater_target_temperature", "water_heater_target_temperature", "mdi:thermometer-chevron-up")
+
+    @property
+    def native_value(self) -> float | None:
+        val = self.status.get("target_temperature")
+        return float(val) if val is not None else None
+
+    async def async_set_native_value(self, value: float) -> None:
+        target = int(round(value))
+        if await self.client.set_temperature(target):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to set Hisense water heater target temperature")
+
+
+class HisenseDehumidifierTargetHumidityNumber(HisenseEntity, NumberEntity):
+    _attr_translation_key = "dehumidifier_target_humidity"
+    _attr_native_min_value = 30
+    _attr_native_max_value = 80
+    _attr_native_step = 5
+    _attr_mode = NumberMode.SLIDER
+    _attr_native_unit_of_measurement = "%"
+    _attr_icon = "mdi:water-percent"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "dehumidifier_target_humidity", "dehumidifier_target_humidity", "mdi:water-percent")
+
+    @property
+    def native_value(self) -> float | None:
+        val = self.status.get("target_humidity")
+        return float(val) if val is not None else None
+
+    async def async_set_native_value(self, value: float) -> None:
+        target = int(round(value))
+        if await self.client.set_target_humidity(target):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to set Hisense dehumidifier target humidity")
+
+
+class HisenseWineCabinetZone1TemperatureNumber(HisenseEntity, NumberEntity):
+    _attr_translation_key = "wine_cabinet_zone1_target_temperature"
+    _attr_native_min_value = 5
+    _attr_native_max_value = 20
+    _attr_native_step = 1
+    _attr_mode = NumberMode.BOX
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_icon = "mdi:thermometer-chevron-up"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "wine_cabinet_zone1_target_temperature", "wine_cabinet_zone1_target_temperature", "mdi:thermometer-chevron-up")
+
+    @property
+    def native_value(self) -> float | None:
+        val = self.status.get("zone1_target_temperature")
+        return float(val) if val is not None else None
+
+    async def async_set_native_value(self, value: float) -> None:
+        target = int(round(value))
+        if await self.client.set_zone1_temperature(target):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to set Hisense wine cabinet zone 1 temperature")
+
+
+class HisenseWineCabinetZone2TemperatureNumber(HisenseEntity, NumberEntity):
+    _attr_translation_key = "wine_cabinet_zone2_target_temperature"
+    _attr_native_min_value = 5
+    _attr_native_max_value = 20
+    _attr_native_step = 1
+    _attr_mode = NumberMode.BOX
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_icon = "mdi:thermometer-chevron-up"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "wine_cabinet_zone2_target_temperature", "wine_cabinet_zone2_target_temperature", "mdi:thermometer-chevron-up")
+
+    @property
+    def native_value(self) -> float | None:
+        val = self.status.get("zone2_target_temperature")
+        return float(val) if val is not None else None
+
+    async def async_set_native_value(self, value: float) -> None:
+        target = int(round(value))
+        if await self.client.set_zone2_temperature(target):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to set Hisense wine cabinet zone 2 temperature")

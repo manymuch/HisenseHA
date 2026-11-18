@@ -158,6 +158,51 @@
       },
       "fridge_variation_power": {
         "name": "变温室启闭"
+      },
+      "oven_power": {
+        "name": "蒸烤箱电源"
+      },
+      "oven_start_pause": {
+        "name": "蒸烤箱启动/暂停"
+      },
+      "oven_child_lock": {
+        "name": "蒸烤箱童锁"
+      },
+      "dishwasher_power": {
+        "name": "洗碗机电源"
+      },
+      "dishwasher_start_pause": {
+        "name": "洗碗机启动/暂停"
+      },
+      "dishwasher_child_lock": {
+        "name": "洗碗机童锁"
+      },
+      "water_heater_power": {
+        "name": "热水器电源"
+      },
+      "hood_power": {
+        "name": "油烟机电源"
+      },
+      "hood_light": {
+        "name": "油烟机照明"
+      },
+      "hood_delay_off": {
+        "name": "油烟机延时关机"
+      },
+      "dehumidifier_power": {
+        "name": "除湿机电源"
+      },
+      "dehumidifier_child_lock": {
+        "name": "除湿机童锁"
+      },
+      "fresh_air_power": {
+        "name": "新风系统电源"
+      },
+      "wine_cabinet_power": {
+        "name": "酒柜电源"
+      },
+      "wine_cabinet_light": {
+        "name": "酒柜照明"
       }
     },
     "button": {
@@ -216,6 +261,24 @@
       },
       "fridge_freezer_target_temperature": {
         "name": "温度设定-冷冻室"
+      },
+      "oven_target_temperature": {
+        "name": "蒸烤箱温度设定"
+      },
+      "oven_cook_time": {
+        "name": "蒸烤箱烹饪时长设定"
+      },
+      "water_heater_target_temperature": {
+        "name": "热水器温度设定"
+      },
+      "dehumidifier_target_humidity": {
+        "name": "除湿机湿度设定"
+      },
+      "wine_cabinet_zone1_target_temperature": {
+        "name": "酒柜上温区温度设定"
+      },
+      "wine_cabinet_zone2_target_temperature": {
+        "name": "酒柜下温区温度设定"
       }
     },
     "select": {
@@ -285,6 +348,21 @@
       },
       "dryer_program_select": {
         "name": "烘干程序"
+      },
+      "oven_mode_select": {
+        "name": "蒸烤箱烹饪模式"
+      },
+      "dishwasher_program_select": {
+        "name": "洗碗机洗涤程序"
+      },
+      "hood_speed_select": {
+        "name": "油烟机风速调节"
+      },
+      "dehumidifier_mode_select": {
+        "name": "除湿机工作模式"
+      },
+      "fresh_air_mode_select": {
+        "name": "新风系统工作模式"
       }
     },
     "sensor": {
@@ -442,6 +520,93 @@
       },
       "tv_last_key": {
         "name": "最近按键"
+      },
+      "oven_real_temperature": {
+        "name": "蒸烤箱实测温度"
+      },
+      "oven_target_temperature": {
+        "name": "蒸烤箱目标温度"
+      },
+      "oven_cook_time": {
+        "name": "蒸烤箱烹饪时长"
+      },
+      "oven_remaining_minutes": {
+        "name": "蒸烤箱剩余时间"
+      },
+      "oven_probe_temperature": {
+        "name": "蒸烤箱探针温度"
+      },
+      "oven_run_status": {
+        "name": "蒸烤箱运行状态"
+      },
+      "oven_work_mode": {
+        "name": "蒸烤箱烹饪模式"
+      },
+      "dishwasher_phase": {
+        "name": "洗碗机当前阶段"
+      },
+      "dishwasher_work_mode": {
+        "name": "洗碗机洗涤程序"
+      },
+      "dishwasher_remaining_minutes": {
+        "name": "洗碗机剩余时间"
+      },
+      "water_heater_real_temperature": {
+        "name": "热水器当前水温"
+      },
+      "water_heater_target_temperature": {
+        "name": "热水器目标水温"
+      },
+      "water_heater_hot_water_quantity": {
+        "name": "热水器剩余水量"
+      },
+      "hood_fan_speed": {
+        "name": "油烟机风速挡位"
+      },
+      "hood_delay_off_remain_time": {
+        "name": "油烟机延时关机倒计时"
+      },
+      "stove_left_fire_power": {
+        "name": "燃气灶左灶火力"
+      },
+      "stove_right_fire_power": {
+        "name": "燃气灶右灶火力"
+      },
+      "stove_left_timer": {
+        "name": "燃气灶左灶定时"
+      },
+      "stove_right_timer": {
+        "name": "燃气灶右灶定时"
+      },
+      "dehumidifier_real_humidity": {
+        "name": "除湿机当前环境湿度"
+      },
+      "dehumidifier_target_humidity": {
+        "name": "除湿机目标湿度"
+      },
+      "dehumidifier_work_mode": {
+        "name": "除湿机工作模式"
+      },
+      "fresh_air_fan_speed": {
+        "name": "新风系统风速"
+      },
+      "fresh_air_work_mode": {
+        "name": "新风系统工作模式"
+      },
+      "wine_cabinet_zone1_real_temperature": {
+        "name": "酒柜上温区实测温度"
+      },
+      "wine_cabinet_zone1_target_temperature": {
+        "name": "酒柜上温区目标温度"
+      },
+      "wine_cabinet_zone2_real_temperature": {
+        "name": "酒柜下温区实测温度"
+      },
+      "wine_cabinet_zone2_target_temperature": {
+        "name": "酒柜下温区目标温度"
+      },
+      "wine_cabinet_humidity": {
+        "name": "酒柜实测湿度"
       }
     },
     "binary_sensor": {
@@ -531,6 +696,39 @@
       },
       "fridge_cleaner": {
         "name": "净味"
+      },
+      "oven_power": {
+        "name": "蒸烤箱电源状态"
+      },
+      "oven_door_open": {
+        "name": "蒸烤箱门状态"
+      },
+      "oven_water_box_lack": {
+        "name": "蒸烤箱水箱缺水告警"
+      },
+      "dishwasher_power": {
+        "name": "洗碗机电源状态"
+      },
+      "dishwasher_door_open": {
+        "name": "洗碗机门状态"
+      },
+      "dishwasher_salt_lack": {
+        "name": "洗碗机缺软水盐告警"
+      },
+      "dishwasher_rinse_aid_lack": {
+        "name": "洗碗机缺光亮剂告警"
+      },
+      "water_heater_power": {
+        "name": "热水器电源状态"
+      },
+      "water_heater_heating": {
+        "name": "热水器加热状态"
+      },
+      "dehumidifier_power": {
+        "name": "除湿机电源状态"
+      },
+      "dehumidifier_water_full": {
+        "name": "除湿机水箱已满告警"
       }
     },
     "media_player": {

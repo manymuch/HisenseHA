@@ -17,8 +17,23 @@ from .pyhisenseapi import (
     HiSenseFridge,
     HiSenseTV,
     HiSenseWasher,
+    HiSenseOven,
+    HiSenseDishwasher,
+    HiSenseWaterHeater,
+    HiSenseHood,
+    HiSenseStove,
+    HiSenseDehumidifier,
+    HiSenseFreshAir,
+    HiSenseWineCabinet,
     WASHER_PROGRAM_REVERSE_MAP,
     WASHER_DRY_REVERSE_MAP,
+    OVEN_RUN_STATUS_MAP,
+    OVEN_MODE_REVERSE_MAP,
+    DISHWASHER_RUN_STATUS_MAP,
+    DISHWASHER_PROGRAM_REVERSE_MAP,
+    HOOD_SPEED_REVERSE_MAP,
+    DEHUMIDIFIER_MODE_REVERSE_MAP,
+    FRESH_AIR_MODE_REVERSE_MAP,
 )
 from .mqtt_client import HisenseMQTTManager
 
@@ -136,6 +151,142 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
             )
         elif device_type == "电视":
             client = HiSenseTV(
+                wifi_id=wifi_id,
+                device_id=device_id,
+                refresh_token=refresh_token,
+                session=session,
+                device_name=friendly_name,
+                entity_name=entity_name,
+                home_id=home_id,
+                access_token=access_token,
+                customer_id=customer_id,
+                partner_id=partner_id,
+                username=username,
+                password=password,
+                on_token_refresh=save_tokens,
+                token_lock=token_lock,
+            )
+        elif device_type == "烤箱":
+            client = HiSenseOven(
+                wifi_id=wifi_id,
+                device_id=device_id,
+                refresh_token=refresh_token,
+                session=session,
+                device_name=friendly_name,
+                entity_name=entity_name,
+                home_id=home_id,
+                access_token=access_token,
+                customer_id=customer_id,
+                partner_id=partner_id,
+                username=username,
+                password=password,
+                on_token_refresh=save_tokens,
+                token_lock=token_lock,
+            )
+        elif device_type == "洗碗机":
+            client = HiSenseDishwasher(
+                wifi_id=wifi_id,
+                device_id=device_id,
+                refresh_token=refresh_token,
+                session=session,
+                device_name=friendly_name,
+                entity_name=entity_name,
+                home_id=home_id,
+                access_token=access_token,
+                customer_id=customer_id,
+                partner_id=partner_id,
+                username=username,
+                password=password,
+                on_token_refresh=save_tokens,
+                token_lock=token_lock,
+            )
+        elif device_type == "热水器":
+            client = HiSenseWaterHeater(
+                wifi_id=wifi_id,
+                device_id=device_id,
+                refresh_token=refresh_token,
+                session=session,
+                device_name=friendly_name,
+                entity_name=entity_name,
+                home_id=home_id,
+                access_token=access_token,
+                customer_id=customer_id,
+                partner_id=partner_id,
+                username=username,
+                password=password,
+                on_token_refresh=save_tokens,
+                token_lock=token_lock,
+            )
+        elif device_type == "油烟机":
+            client = HiSenseHood(
+                wifi_id=wifi_id,
+                device_id=device_id,
+                refresh_token=refresh_token,
+                session=session,
+                device_name=friendly_name,
+                entity_name=entity_name,
+                home_id=home_id,
+                access_token=access_token,
+                customer_id=customer_id,
+                partner_id=partner_id,
+                username=username,
+                password=password,
+                on_token_refresh=save_tokens,
+                token_lock=token_lock,
+            )
+        elif device_type == "燃气灶":
+            client = HiSenseStove(
+                wifi_id=wifi_id,
+                device_id=device_id,
+                refresh_token=refresh_token,
+                session=session,
+                device_name=friendly_name,
+                entity_name=entity_name,
+                home_id=home_id,
+                access_token=access_token,
+                customer_id=customer_id,
+                partner_id=partner_id,
+                username=username,
+                password=password,
+                on_token_refresh=save_tokens,
+                token_lock=token_lock,
+            )
+        elif device_type == "除湿机":
+            client = HiSenseDehumidifier(
+                wifi_id=wifi_id,
+                device_id=device_id,
+                refresh_token=refresh_token,
+                session=session,
+                device_name=friendly_name,
+                entity_name=entity_name,
+                home_id=home_id,
+                access_token=access_token,
+                customer_id=customer_id,
+                partner_id=partner_id,
+                username=username,
+                password=password,
+                on_token_refresh=save_tokens,
+                token_lock=token_lock,
+            )
+        elif device_type == "新风系统":
+            client = HiSenseFreshAir(
+                wifi_id=wifi_id,
+                device_id=device_id,
+                refresh_token=refresh_token,
+                session=session,
+                device_name=friendly_name,
+                entity_name=entity_name,
+                home_id=home_id,
+                access_token=access_token,
+                customer_id=customer_id,
+                partner_id=partner_id,
+                username=username,
+                password=password,
+                on_token_refresh=save_tokens,
+                token_lock=token_lock,
+            )
+        elif device_type == "酒柜":
+            client = HiSenseWineCabinet(
                 wifi_id=wifi_id,
                 device_id=device_id,
                 refresh_token=refresh_token,
@@ -341,6 +492,51 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
                             t_val = change_info["remainRunTime"]
                             t_curr = t_val[0] if isinstance(t_val, list) else t_val
                             changes.append(f"剩余{t_curr}分")
+                        # 烤箱 / 洗碗机 / 热水器 / 油烟机 / 除湿机 / 燃气灶字段
+                        if "cookTime" in change_info:
+                            ct_val = change_info["cookTime"]
+                            ct_curr = ct_val[0] if isinstance(ct_val, list) else ct_val
+                            changes.append(f"烹饪时长:{ct_curr}分")
+                        if "probeTemperature" in change_info:
+                            pt_val = change_info["probeTemperature"]
+                            pt_curr = pt_val[0] if isinstance(pt_val, list) else pt_val
+                            changes.append(f"探针温度:{pt_curr}℃")
+                        if "saltLackStatus" in change_info:
+                            sl = change_info["saltLackStatus"]
+                            sl_curr = sl[0] if isinstance(sl, list) else sl
+                            changes.append("缺软水盐" if str(sl_curr) == "1" else "软水盐正常")
+                        if "rinseAidLackStatus" in change_info:
+                            ra = change_info["rinseAidLackStatus"]
+                            ra_curr = ra[0] if isinstance(ra, list) else ra
+                            changes.append("缺光亮剂" if str(ra_curr) == "1" else "光亮剂正常")
+                        if "realWaterTemperature" in change_info or "setWaterTemperature" in change_info:
+                            wt = change_info.get("realWaterTemperature", change_info.get("setWaterTemperature"))
+                            wt_curr = wt[0] if isinstance(wt, list) else wt
+                            changes.append(f"水温:{wt_curr}℃")
+                        if "heatingStatus" in change_info:
+                            hs = change_info["heatingStatus"]
+                            hs_curr = hs[0] if isinstance(hs, list) else hs
+                            changes.append("加热中" if str(hs_curr) == "1" else "保温中")
+                        if "lightSwitch" in change_info or "lightSwitchControl" in change_info:
+                            ls = change_info.get("lightSwitch", change_info.get("lightSwitchControl"))
+                            ls_curr = ls[0] if isinstance(ls, list) else ls
+                            changes.append("照明:开" if str(ls_curr) == "1" else "照明:关")
+                        if "targetHumidity" in change_info:
+                            th = change_info["targetHumidity"]
+                            th_curr = th[0] if isinstance(th, list) else th
+                            changes.append(f"目标湿度:{th_curr}%")
+                        if "waterFullStatus" in change_info:
+                            wf = change_info["waterFullStatus"]
+                            wf_curr = wf[0] if isinstance(wf, list) else wf
+                            changes.append("水箱已满" if str(wf_curr) == "1" else "水箱正常")
+                        if "firePower.left" in change_info or "leftFirePower" in change_info:
+                            fp = change_info.get("firePower.left", change_info.get("leftFirePower"))
+                            fp_curr = fp[0] if isinstance(fp, list) else fp
+                            changes.append(f"左灶火力:{fp_curr}")
+                        if "firePower.right" in change_info or "rightFirePower" in change_info:
+                            fp = change_info.get("firePower.right", change_info.get("rightFirePower"))
+                            fp_curr = fp[0] if isinstance(fp, list) else fp
+                            changes.append(f"右灶火力:{fp_curr}")
                         if changes:
                             summary_str = " | ".join(changes)
 
@@ -432,25 +628,25 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
                     if len(coord.push_history) > 30:
                         coord.push_history.pop(0)
 
-                    # 3. 洗衣机 / 干衣机完成检测与专属通知
-                    dev_name = getattr(coord.client, "device_name", None) or ("海信干衣机" if coord.device_type == "干衣机" else "海信洗衣机")
+                    # 3. 洗衣机 / 干衣机 / 洗碗机 / 烤箱完成检测与专属通知
+                    dev_name = getattr(coord.client, "device_name", None) or f"海信{coord.device_type}"
                     is_complete = False
-                    if status_val in ("complete", "7"):
+                    if status_val in ("complete", "7", "4"):
                         is_complete = True
                     elif isinstance(change_info, dict) and "runStatus" in change_info:
                         r_val = change_info["runStatus"]
                         r_curr = r_val[0] if isinstance(r_val, list) else r_val
-                        if str(r_curr) == "7":
+                        if str(r_curr) in ("7", "4"):
                             is_complete = True
-                    elif msg_content and any(w in msg_content for w in ("洗衣完毕", "洗涤完成", "烘干完成", "已完成洗衣", "已完成烘干")):
+                    elif msg_content and any(w in msg_content for w in ("洗衣完毕", "洗涤完成", "烘干完成", "已完成洗衣", "已完成烘干", "洗碗完成", "烹饪完成", "烘烤完成")):
                         is_complete = True
                     elif str(tag_val) == "8001008":
                         is_complete = True
 
-                    if is_complete and coord.device_type in ("洗衣机", "干衣机"):
+                    if is_complete and coord.device_type in ("洗衣机", "干衣机", "洗碗机", "烤箱"):
                         if hasattr(coord.client, "status") and isinstance(coord.client.status, dict):
                             coord.client.status.update({
-                                "run_status": 7,
+                                "run_status": 7 if coord.device_type != "烤箱" else 4,
                                 "machine_state": "complete",
                                 "cycle_phase": "complete",
                                 "is_running": False,
@@ -460,11 +656,22 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
                             })
                             coord.async_set_updated_data(coord.client.get_status())
 
-                    if is_complete and coord.device_type in ("洗衣机", "干衣机"):
-                        action_name = "烘干" if coord.device_type == "干衣机" else "洗衣"
+                    if is_complete and coord.device_type in ("洗衣机", "干衣机", "洗碗机", "烤箱"):
+                        action_name = {
+                            "洗衣机": "洗衣",
+                            "干衣机": "烘干",
+                            "洗碗机": "洗碗",
+                            "烤箱": "烹饪",
+                        }.get(coord.device_type, "运行")
+                        event_type = {
+                            "洗衣机": "washer",
+                            "干衣机": "dryer",
+                            "洗碗机": "dishwasher",
+                            "烤箱": "oven",
+                        }.get(coord.device_type, "device")
                         content_desc = msg_content or f"【{dev_name}】已完成{action_name}！"
                         hass.bus.async_fire(
-                            f"hisense_{'dryer' if coord.device_type == '干衣机' else 'washer'}_complete",
+                            f"hisense_{event_type}_complete",
                             {
                                 "device_id": str(dev_id),
                                 "device_name": dev_name,
@@ -477,7 +684,7 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
                             hass,
                             f"收到{dev_name}推送：{content_desc}\n推送时间：{now_str}",
                             title=f"海信智慧家 - {action_name}完成提醒",
-                            notification_id=f"hisense_{coord.device_type}_complete_{dev_id}",
+                            notification_id=f"hisense_{event_type}_complete_{dev_id}",
                         )
 
                     # 立即刷新所有绑定该 coordinator 的实体状态

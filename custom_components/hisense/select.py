@@ -19,6 +19,16 @@ from .pyhisenseapi import (
     WASHER_RINSE_REVERSE_MAP,
     WASHER_DRY_MAP,
     WASHER_DRY_REVERSE_MAP,
+    OVEN_MODE_MAP,
+    OVEN_MODE_REVERSE_MAP,
+    DISHWASHER_PROGRAM_MAP,
+    DISHWASHER_PROGRAM_REVERSE_MAP,
+    HOOD_SPEED_MAP,
+    HOOD_SPEED_REVERSE_MAP,
+    DEHUMIDIFIER_MODE_MAP,
+    DEHUMIDIFIER_MODE_REVERSE_MAP,
+    FRESH_AIR_MODE_MAP,
+    FRESH_AIR_MODE_REVERSE_MAP,
 )
 
 WASHER_SPIN_OPTIONS = list(WASHER_SPIN_MAP.keys())
@@ -53,6 +63,12 @@ DRYER_PROGRAM_MAP = {
 }
 DRYER_PROGRAM_REVERSE_MAP = {v: k for k, v in DRYER_PROGRAM_MAP.items()}
 DRYER_PROGRAM_OPTIONS = list(DRYER_PROGRAM_MAP.keys())
+
+OVEN_MODE_OPTIONS = list(OVEN_MODE_MAP.keys())
+DISHWASHER_PROGRAM_OPTIONS = list(DISHWASHER_PROGRAM_MAP.keys())
+HOOD_SPEED_OPTIONS = list(HOOD_SPEED_MAP.keys())
+DEHUMIDIFIER_MODE_OPTIONS = list(DEHUMIDIFIER_MODE_MAP.keys())
+FRESH_AIR_MODE_OPTIONS = list(FRESH_AIR_MODE_MAP.keys())
 
 
 #: 「自定义」= 退出正在运行的预设模式（下发 value="0"），不是只读展示值。
@@ -122,6 +138,26 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     ]
     if dryer_coordinators:
         async_add_entities([HisenseDryerProgramSelect(c) for c in dryer_coordinators])
+
+    oven_coordinators = [c for c in coordinators.values() if c.device_type == "烤箱"]
+    if oven_coordinators:
+        async_add_entities([HisenseOvenModeSelect(c) for c in oven_coordinators])
+
+    dishwasher_coordinators = [c for c in coordinators.values() if c.device_type == "洗碗机"]
+    if dishwasher_coordinators:
+        async_add_entities([HisenseDishwasherProgramSelect(c) for c in dishwasher_coordinators])
+
+    hood_coordinators = [c for c in coordinators.values() if c.device_type == "油烟机"]
+    if hood_coordinators:
+        async_add_entities([HisenseHoodSpeedSelect(c) for c in hood_coordinators])
+
+    dehumidifier_coordinators = [c for c in coordinators.values() if c.device_type == "除湿机"]
+    if dehumidifier_coordinators:
+        async_add_entities([HisenseDehumidifierModeSelect(c) for c in dehumidifier_coordinators])
+
+    fresh_air_coordinators = [c for c in coordinators.values() if c.device_type == "新风系统"]
+    if fresh_air_coordinators:
+        async_add_entities([HisenseFreshAirModeSelect(c) for c in fresh_air_coordinators])
 
 
 class HisenseFridgeModeSelect(HisenseEntity, SelectEntity):
@@ -477,3 +513,151 @@ class HisenseDryerProgramSelect(HisenseEntity, SelectEntity):
             return
         raise HomeAssistantError(f"Failed to set dryer program to {option}")
 
+
+
+class HisenseOvenModeSelect(HisenseEntity, SelectEntity):
+    _attr_translation_key = "oven_mode_select"
+    _attr_icon = "mdi:stove"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "oven_mode_select", "oven_mode_select", "mdi:stove")
+        self._attr_options = OVEN_MODE_OPTIONS
+
+    @property
+    def current_option(self):
+        val = self.status.get("work_mode")
+        if val is None:
+            return None
+        return OVEN_MODE_REVERSE_MAP.get(val, str(val))
+
+    async def async_select_option(self, option: str):
+        mode_id = OVEN_MODE_MAP.get(option)
+        if mode_id is None:
+            if str(option).isdigit():
+                mode_id = int(option)
+            else:
+                raise HomeAssistantError(f"Unsupported oven mode: {option}")
+        if not self.status.get("power_on"):
+            raise HomeAssistantError("请先开启蒸烤箱电源后再切换模式")
+        if await self.client.set_mode(mode_id):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError(f"Failed to set oven mode to {option}")
+
+
+class HisenseDishwasherProgramSelect(HisenseEntity, SelectEntity):
+    _attr_translation_key = "dishwasher_program_select"
+    _attr_icon = "mdi:dishwasher"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "dishwasher_program_select", "dishwasher_program_select", "mdi:dishwasher")
+        self._attr_options = DISHWASHER_PROGRAM_OPTIONS
+
+    @property
+    def current_option(self):
+        val = self.status.get("work_mode")
+        if val is None:
+            return None
+        return DISHWASHER_PROGRAM_REVERSE_MAP.get(val, str(val))
+
+    async def async_select_option(self, option: str):
+        mode_id = DISHWASHER_PROGRAM_MAP.get(option)
+        if mode_id is None:
+            if str(option).isdigit():
+                mode_id = int(option)
+            else:
+                raise HomeAssistantError(f"Unsupported dishwasher program: {option}")
+        if not self.status.get("power_on"):
+            raise HomeAssistantError("请先开启洗碗机电源后再切换程序")
+        if await self.client.set_program(mode_id):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError(f"Failed to set dishwasher program to {option}")
+
+
+class HisenseHoodSpeedSelect(HisenseEntity, SelectEntity):
+    _attr_translation_key = "hood_speed_select"
+    _attr_icon = "mdi:fan"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "hood_speed_select", "hood_speed_select", "mdi:fan")
+        self._attr_options = HOOD_SPEED_OPTIONS
+
+    @property
+    def current_option(self):
+        val = self.status.get("fan_speed")
+        if val is None:
+            return None
+        return HOOD_SPEED_REVERSE_MAP.get(val, str(val))
+
+    async def async_select_option(self, option: str):
+        speed = HOOD_SPEED_MAP.get(option)
+        if speed is None:
+            if str(option).isdigit():
+                speed = int(option)
+            else:
+                raise HomeAssistantError(f"Unsupported hood speed: {option}")
+        if await self.client.set_fan_speed(speed):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError(f"Failed to set hood speed to {option}")
+
+
+class HisenseDehumidifierModeSelect(HisenseEntity, SelectEntity):
+    _attr_translation_key = "dehumidifier_mode_select"
+    _attr_icon = "mdi:tune"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "dehumidifier_mode_select", "dehumidifier_mode_select", "mdi:tune")
+        self._attr_options = DEHUMIDIFIER_MODE_OPTIONS
+
+    @property
+    def current_option(self):
+        val = self.status.get("work_mode")
+        if val is None:
+            return None
+        return DEHUMIDIFIER_MODE_REVERSE_MAP.get(val, str(val))
+
+    async def async_select_option(self, option: str):
+        mode_id = DEHUMIDIFIER_MODE_MAP.get(option)
+        if mode_id is None:
+            if str(option).isdigit():
+                mode_id = int(option)
+            else:
+                raise HomeAssistantError(f"Unsupported dehumidifier mode: {option}")
+        if not self.status.get("power_on"):
+            raise HomeAssistantError("请先开启除湿机电源后再切换模式")
+        if await self.client.set_mode(mode_id):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError(f"Failed to set dehumidifier mode to {option}")
+
+
+class HisenseFreshAirModeSelect(HisenseEntity, SelectEntity):
+    _attr_translation_key = "fresh_air_mode_select"
+    _attr_icon = "mdi:air-filter"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "fresh_air_mode_select", "fresh_air_mode_select", "mdi:air-filter")
+        self._attr_options = FRESH_AIR_MODE_OPTIONS
+
+    @property
+    def current_option(self):
+        val = self.status.get("work_mode")
+        if val is None:
+            return None
+        return FRESH_AIR_MODE_REVERSE_MAP.get(val, str(val))
+
+    async def async_select_option(self, option: str):
+        mode_id = FRESH_AIR_MODE_MAP.get(option)
+        if mode_id is None:
+            if str(option).isdigit():
+                mode_id = int(option)
+            else:
+                raise HomeAssistantError(f"Unsupported fresh air mode: {option}")
+        if not self.status.get("power_on"):
+            raise HomeAssistantError("请先开启新风系统电源后再切换模式")
+        if await self.client.set_mode(mode_id):
+            self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError(f"Failed to set fresh air mode to {option}")
