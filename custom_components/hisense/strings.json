@@ -40,10 +40,11 @@
     "step": {
       "init": {
         "title": "Hisense Appliance Settings",
-        "description": "Configure dynamic polling. To avoid account bans from excessive requests, standby is strictly zero-polling, and wash-time polling is enforced to be at least 5 minutes.",
+        "description": "Configure cloud polling options. To prevent account bans from excessive requests, standby is strictly zero-polling, wash-time dynamic polling is enforced to be at least 5 minutes, and 60s periodic compensation for water heater/fridge is disabled by default (relying on real-time MQTT push).",
         "data": {
           "enable_washer_dynamic_poll": "Enable dynamic cloud polling during washing (default disabled, pure local countdown & MQTT)",
-          "washer_poll_interval": "Dynamic polling interval while washing (minutes, minimum 5 minutes)"
+          "washer_poll_interval": "Dynamic polling interval while washing (minutes, minimum 5 minutes)",
+          "enable_periodic_poll": "Enable 60s periodic polling compensation for water heater / fridge (default disabled to prevent bans)"
         }
       }
     },

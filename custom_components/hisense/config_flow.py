@@ -12,6 +12,8 @@ from .const import (
     DEFAULT_ENABLE_WASHER_POLL,
     DEFAULT_WASHER_POLL_INTERVAL,
     MIN_WASHER_POLL_INTERVAL,
+    CONF_ENABLE_PERIODIC_POLL,
+    DEFAULT_ENABLE_PERIODIC_POLL,
 )
 from .pyhisenseapi import HiSenseLogin
 
@@ -274,6 +276,10 @@ class HisenseOptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_WASHER_POLL_INTERVAL,
                     default=options.get(CONF_WASHER_POLL_INTERVAL, DEFAULT_WASHER_POLL_INTERVAL),
                 ): vol.All(vol.Coerce(int), vol.Range(min=MIN_WASHER_POLL_INTERVAL)),
+                vol.Required(
+                    CONF_ENABLE_PERIODIC_POLL,
+                    default=options.get(CONF_ENABLE_PERIODIC_POLL, DEFAULT_ENABLE_PERIODIC_POLL),
+                ): bool,
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema, errors=errors)

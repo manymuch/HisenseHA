@@ -18,6 +18,8 @@ from .const import (
     DEFAULT_ENABLE_WASHER_POLL,
     DEFAULT_WASHER_POLL_INTERVAL,
     MIN_WASHER_POLL_INTERVAL,
+    CONF_ENABLE_PERIODIC_POLL,
+    DEFAULT_ENABLE_PERIODIC_POLL,
 )
 from .pyhisenseapi import (
     HiSenseAC,
@@ -71,9 +73,15 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._countdown_task: asyncio.Task | None = None
         self._estimated_end_time: datetime | None = None
 
+        # 定时轮询补偿：根据用户配置选择是否开启（默认关闭以防封号，依赖 MQTT 实时推送）
+        options = entry.options if entry else {}
+        enable_periodic_poll = options.get(
+            CONF_ENABLE_PERIODIC_POLL, DEFAULT_ENABLE_PERIODIC_POLL
+        )
+
         initial_interval = (
             timedelta(seconds=_FRIDGE_SCAN_INTERVAL)
-            if device_type in ("冰箱", "酒柜", "热水器")
+            if (enable_periodic_poll and device_type in ("冰箱", "酒柜", "热水器"))
             else None
         )
 
