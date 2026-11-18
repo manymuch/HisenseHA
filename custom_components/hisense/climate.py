@@ -110,7 +110,7 @@ class HisenseACClimate(HisenseEntity, ClimateEntity):
         return float(self.client.climate_max_temp)
 
     @property
-    def current_temperature(self):
+    def native_current_temperature(self):
         return self.status.get("indoor_temperature")
 
     @property
@@ -118,7 +118,7 @@ class HisenseACClimate(HisenseEntity, ClimateEntity):
         return self.status.get("humidity")
 
     @property
-    def target_temperature(self):
+    def native_target_temperature(self):
         return self.status.get("desired_temperature")
 
     @property
@@ -165,11 +165,9 @@ class HisenseACClimate(HisenseEntity, ClimateEntity):
     async def async_set_temperature(self, **kwargs):
         """Set new target temperature."""
         if not self.status.get("power_on"):
-            _LOGGER.error("Cannot set temperature when power is off")
-            return
+            raise HomeAssistantError("空调处于关机状态，无法调节温度")
         if self.hvac_mode == HVACMode.FAN_ONLY:
-            _LOGGER.error("Cannot set temperature in 'Fan Only' mode")
-            return
+            raise HomeAssistantError("送风模式下无法调节温度")
 
         temperature = kwargs.get(ATTR_TEMPERATURE)
         if temperature is not None:
@@ -181,8 +179,7 @@ class HisenseACClimate(HisenseEntity, ClimateEntity):
     async def async_set_fan_mode(self, fan_mode):
         """Set new target fan mode."""
         if not self.status.get("power_on"):
-            _LOGGER.error("Cannot set fan mode when power is off")
-            return
+            raise HomeAssistantError("空调处于关机状态，无法调节风速")
         if fan_mode == FAN_AUTO:
             if await self.client.set_auto_wind(True):
                 self.coordinator.async_update_from_client()
@@ -200,8 +197,7 @@ class HisenseACClimate(HisenseEntity, ClimateEntity):
         if swing_mode not in self._attr_swing_modes:
             raise HomeAssistantError(f"Unsupported Hisense AC swing mode: {swing_mode}")
         if not self.status.get("power_on"):
-            _LOGGER.error("Cannot set swing mode when power is off")
-            return
+            raise HomeAssistantError("空调处于关机状态，无法设置摆风")
         if swing_mode == SWING_OFF:
             await self.client.set_vertical_swing(False)
             await self.client.set_horizontal_swing(False)

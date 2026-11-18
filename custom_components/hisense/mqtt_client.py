@@ -64,8 +64,6 @@ class HisenseMQTTManager:
             f"$iot/{self.device_id}/#",
             f"$iot/general/user/{self.customer_id}/down/JHKAIHOME/#",
             f"$iot/general/user/{self.customer_id}/#",
-            "$iot/#",
-            "#",
         ]
         if self.extra_topics:
             topics.extend(self.extra_topics)
@@ -180,13 +178,28 @@ class HisenseMQTTManager:
         self.client.on_disconnect = on_disconnect
         self.client.on_message = on_message
 
-        try:
-            self.client.connect_async(host, port, keepalive=60)
-            self.client.loop_start()
-            return True
-        except Exception as e:
-            _LOGGER.error("Failed to connect to Hisense MQTT Broker: %s", e)
-            return False
+        retry_delay = 5
+        max_attempts = 10
+        for attempt in range(1, max_attempts + 1):
+            if not self._is_running:
+                return False
+            try:
+                self.client.connect_async(host, port, keepalive=60)
+                self.client.loop_start()
+                return True
+            except Exception as e:
+                _LOGGER.warning(
+                    "Attempt %s/%s to connect Hisense MQTT broker failed: %s; retrying in %ss",
+                    attempt,
+                    max_attempts,
+                    e,
+                    retry_delay,
+                )
+                if attempt < max_attempts:
+                    await asyncio.sleep(retry_delay)
+                else:
+                    _LOGGER.error("Failed to connect to Hisense MQTT Broker after %s attempts", max_attempts)
+                    return False
 
     def handle_message(self, topic: str, payload_bytes: bytes):
         """Handle incoming MQTT messages on background thread safely."""
@@ -243,9 +256,21 @@ class HisenseMQTTManager:
                 self.on_message_callback(device_id, payload)
 
     async def stop(self):
-        """Stop MQTT client."""
+        """Stop MQTT client asynchronously without blocking event loop."""
         self._is_running = False
         if self.client:
-            self.client.loop_stop()
-            self.client.disconnect()
+            client = self.client
             self.client = None
+            try:
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, self._sync_stop, client)
+            except Exception as e:
+                _LOGGER.debug("Error stopping Hisense MQTT client: %s", e)
+
+    @staticmethod
+    def _sync_stop(client):
+        try:
+            client.loop_stop()
+            client.disconnect()
+        except Exception:
+            pass

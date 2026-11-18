@@ -66,6 +66,30 @@
     },
     "hisense_tv": {
       "name": "Hisense TV"
+    },
+    "hisense_oven": {
+      "name": "Hisense Oven"
+    },
+    "hisense_dishwasher": {
+      "name": "Hisense Dishwasher"
+    },
+    "hisense_water_heater": {
+      "name": "Hisense Water Heater"
+    },
+    "hisense_hood": {
+      "name": "Hisense Hood"
+    },
+    "hisense_stove": {
+      "name": "Hisense Gas Stove"
+    },
+    "hisense_dehumidifier": {
+      "name": "Hisense Dehumidifier"
+    },
+    "hisense_fresh_air": {
+      "name": "Hisense Fresh Air"
+    },
+    "hisense_wine_cabinet": {
+      "name": "Hisense Wine Cabinet"
     }
   },
   "entity": {

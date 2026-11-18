@@ -83,8 +83,6 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             name=f"{DOMAIN}_{client.device_id}",
             update_interval=initial_interval,
         )
-        # No first refresh has completed; HA's coordinator defaults this to True.
-        self.last_update_success = False
 
     async def _read_status(self) -> dict[str, Any] | None:
         """Read device state, keeping optional energy data best effort."""
@@ -102,42 +100,32 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return status
 
     async def _async_update_data(self) -> dict[str, Any]:
-        """Try a fresh sign-in after a failed read, at most three times."""
-        for attempt in range(1, _MAX_ATTEMPTS + 1):
-            request_token = self.client.access_token
-            if request_token:
-                try:
-                    status = await self._read_status()
-                except Exception:
-                    _LOGGER.warning("Hisense %s status read failed", self.device_type, exc_info=True)
-                    status = None
-                if status:
-                    self._adjust_poll_interval(status)
-                    return status
+        """Fetch status and recover account access once if token expired."""
+        request_token = self.client.access_token
+        if request_token:
+            try:
+                status = await self._read_status()
+            except Exception:
+                _LOGGER.warning("Hisense %s status read failed", self.device_type, exc_info=True)
+                status = None
+            if status:
+                self._adjust_poll_interval(status)
+                return status
 
-            if not self.client.username or not self.client.password:
-                raise UpdateFailed("Hisense AIHome credentials need reauthentication")
+        if not self.client.username or not self.client.password:
+            raise UpdateFailed("Hisense AIHome credentials need reauthentication")
 
-            if await self.client.refresh(force=True, previous_token=request_token):
-                try:
-                    status = await self._read_status()
-                except Exception:
-                    _LOGGER.warning("Hisense %s status retry failed", self.device_type, exc_info=True)
-                    status = None
-                if status:
-                    self._adjust_poll_interval(status)
-                    return status
+        if await self.client.refresh(force=True, previous_token=request_token):
+            try:
+                status = await self._read_status()
+            except Exception:
+                _LOGGER.warning("Hisense %s status retry failed", self.device_type, exc_info=True)
+                status = None
+            if status:
+                self._adjust_poll_interval(status)
+                return status
 
-            if attempt < _MAX_ATTEMPTS:
-                _LOGGER.warning(
-                    "Hisense %s status recovery attempt %s/%s failed; retrying in 60 seconds",
-                    self.device_type, attempt, _MAX_ATTEMPTS,
-                )
-                await asyncio.sleep(_RETRY_DELAY)
-
-        raise UpdateFailed(
-            f"Failed to fetch Hisense {self.device_type} status after {_MAX_ATTEMPTS} attempts"
-        )
+        raise UpdateFailed(f"Failed to fetch Hisense {self.device_type} status")
 
     def async_start_refresh(self, *, delay: float = 0) -> None:
         """Coalesce manual and control-triggered refreshes into one task."""
@@ -224,7 +212,9 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     self.data["remaining_minutes"] = mins_left
                     if isinstance(self.data.get("protocol_nonzero_values"), dict):
                         self.data["protocol_nonzero_values"]["remainRunTime"] = str(mins_left)
-                    self.async_update_listeners()
+                if hasattr(self.client, "status") and isinstance(self.client.status, dict):
+                    self.client.status["remaining_minutes"] = mins_left
+                self.async_update_listeners()
         except asyncio.CancelledError:
             pass
         except Exception as err:

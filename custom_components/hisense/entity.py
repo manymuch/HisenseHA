@@ -69,18 +69,23 @@ class HisenseEntity(CoordinatorEntity[HisenseDataUpdateCoordinator]):
         device_type = self.coordinator.device_type
         device_name = getattr(self.client, "device_name", "")
         
-        if device_type == "冰箱":
-            translation_key = "hisense_fridge"
-            name = device_name if device_name else "Hisense Fridge"
-        elif device_type == "洗衣机":
-            translation_key = "hisense_washer"
-            name = device_name if device_name else "Hisense Washer"
-        elif device_type == "干衣机":
-            translation_key = "hisense_dryer"
-            name = device_name if device_name else "Hisense Dryer"
-        else:
-            translation_key = "hisense_ac"
-            name = device_name if device_name else "Hisense AC"
+        type_map = {
+            "冰箱": ("hisense_fridge", "Hisense Fridge"),
+            "洗衣机": ("hisense_washer", "Hisense Washer"),
+            "干衣机": ("hisense_dryer", "Hisense Dryer"),
+            "电视": ("hisense_tv", "Hisense TV"),
+            "烤箱": ("hisense_oven", "Hisense Oven"),
+            "洗碗机": ("hisense_dishwasher", "Hisense Dishwasher"),
+            "热水器": ("hisense_water_heater", "Hisense Water Heater"),
+            "油烟机": ("hisense_hood", "Hisense Hood"),
+            "燃气灶": ("hisense_stove", "Hisense Gas Stove"),
+            "除湿机": ("hisense_dehumidifier", "Hisense Dehumidifier"),
+            "新风系统": ("hisense_fresh_air", "Hisense Fresh Air"),
+            "酒柜": ("hisense_wine_cabinet", "Hisense Wine Cabinet"),
+        }
+        default_key, default_name = type_map.get(device_type, ("hisense_ac", "Hisense AC"))
+        translation_key = default_key
+        name = device_name if device_name else default_name
 
         return {
             "identifiers": {(DOMAIN, self.client.device_id)},

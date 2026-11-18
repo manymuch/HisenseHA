@@ -201,7 +201,15 @@ class HisenseOvenTargetTemperatureNumber(HisenseEntity, NumberEntity):
     @property
     def native_value(self) -> float | None:
         val = self.status.get("target_temperature")
-        return float(val) if val is not None else None
+        if val is None:
+            return None
+        try:
+            f_val = float(val)
+            if f_val < self._attr_native_min_value:
+                return None
+            return f_val
+        except (ValueError, TypeError):
+            return None
 
     async def async_set_native_value(self, value: float) -> None:
         target = int(round(value))
@@ -226,7 +234,15 @@ class HisenseOvenCookTimeNumber(HisenseEntity, NumberEntity):
     @property
     def native_value(self) -> float | None:
         val = self.status.get("cook_time")
-        return float(val) if val is not None else None
+        if val is None:
+            return None
+        try:
+            f_val = float(val)
+            if f_val < self._attr_native_min_value:
+                return None
+            return f_val
+        except (ValueError, TypeError):
+            return None
 
     async def async_set_native_value(self, value: float) -> None:
         target = int(round(value))
@@ -251,7 +267,15 @@ class HisenseWaterHeaterTargetTemperatureNumber(HisenseEntity, NumberEntity):
     @property
     def native_value(self) -> float | None:
         val = self.status.get("target_temperature")
-        return float(val) if val is not None else None
+        if val is None:
+            return None
+        try:
+            f_val = float(val)
+            if f_val < self._attr_native_min_value:
+                return None
+            return f_val
+        except (ValueError, TypeError):
+            return None
 
     async def async_set_native_value(self, value: float) -> None:
         target = int(round(value))
@@ -276,7 +300,15 @@ class HisenseDehumidifierTargetHumidityNumber(HisenseEntity, NumberEntity):
     @property
     def native_value(self) -> float | None:
         val = self.status.get("target_humidity")
-        return float(val) if val is not None else None
+        if val is None:
+            return None
+        try:
+            f_val = float(val)
+            if f_val < self._attr_native_min_value:
+                return None
+            return f_val
+        except (ValueError, TypeError):
+            return None
 
     async def async_set_native_value(self, value: float) -> None:
         target = int(round(value))
@@ -301,7 +333,15 @@ class HisenseWineCabinetZone1TemperatureNumber(HisenseEntity, NumberEntity):
     @property
     def native_value(self) -> float | None:
         val = self.status.get("zone1_target_temperature")
-        return float(val) if val is not None else None
+        if val is None:
+            return None
+        try:
+            f_val = float(val)
+            if f_val < self._attr_native_min_value:
+                return None
+            return f_val
+        except (ValueError, TypeError):
+            return None
 
     async def async_set_native_value(self, value: float) -> None:
         target = int(round(value))
@@ -326,7 +366,15 @@ class HisenseWineCabinetZone2TemperatureNumber(HisenseEntity, NumberEntity):
     @property
     def native_value(self) -> float | None:
         val = self.status.get("zone2_target_temperature")
-        return float(val) if val is not None else None
+        if val is None:
+            return None
+        try:
+            f_val = float(val)
+            if f_val < self._attr_native_min_value:
+                return None
+            return f_val
+        except (ValueError, TypeError):
+            return None
 
     async def async_set_native_value(self, value: float) -> None:
         target = int(round(value))

@@ -17,7 +17,6 @@ from .pyhisenseapi import HiSenseLogin
 
 class HisenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
-    CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
 
     @staticmethod
     @core.callback
@@ -52,6 +51,8 @@ class HisenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     errors["base"] = "invalid_auth"
                 else:
                     access_token, refresh_token, customer_id = token_pair
+                    await self.async_set_unique_id(str(customer_id))
+                    self._abort_if_unique_id_configured()
                     try:
                         self._home_options = await hisense_login.get_home_select_options(
                             access_token, customer_id

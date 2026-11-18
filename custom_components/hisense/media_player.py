@@ -10,6 +10,7 @@ from homeassistant.components.media_player import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
@@ -80,23 +81,33 @@ class HisenseTVMediaPlayer(HisenseEntity, MediaPlayerEntity):
         """Turn the TV on."""
         if await self.client.turn_on():
             self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to turn on Hisense TV")
 
     async def async_turn_off(self) -> None:
         """Turn the TV off."""
         if await self.client.turn_off():
             self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to turn off Hisense TV")
 
     async def async_volume_up(self) -> None:
         """Turn volume up for media player."""
         if await self.client.volume_up():
             self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to increase Hisense TV volume")
 
     async def async_volume_down(self) -> None:
         """Turn volume down for media player."""
         if await self.client.volume_down():
             self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to decrease Hisense TV volume")
 
     async def async_mute_volume(self, mute: bool) -> None:
         """Mute (true) or unmute (false) media player."""
         if await self.client.mute(mute):
             self.coordinator.async_update_from_client()
+            return
+        raise HomeAssistantError("Failed to set Hisense TV mute")

@@ -173,7 +173,11 @@ class HiSenseLogin:
             data=body,
             params=params,
         ) as response:
-            result = await response.json()
+            try:
+                result = await response.json()
+            except Exception:
+                _LOGGER.warning("Hisense login returned invalid JSON response (status %s)", response.status)
+                return None
 
         data = result.get("data") or {}
         if data.get("resultCode") != 0:
@@ -519,7 +523,11 @@ class _HiSenseDevice:
             headers=cls._headers(body),
             data=body,
         ) as response:
-            result = await response.json()
+            try:
+                result = await response.json()
+            except Exception:
+                _LOGGER.warning("Hisense API returned non-JSON response on %s (status %s)", path, response.status)
+                return {"resultCode": "9999", "httpCode": response.status}
             if getattr(response, "status", None) in (401, 403) and isinstance(result, dict):
                 return {**result, "httpCode": response.status}
             return result

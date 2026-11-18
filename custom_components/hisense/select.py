@@ -71,6 +71,29 @@ DEHUMIDIFIER_MODE_OPTIONS = list(DEHUMIDIFIER_MODE_MAP.keys())
 FRESH_AIR_MODE_OPTIONS = list(FRESH_AIR_MODE_MAP.keys())
 
 
+def _safe_lookup_option(val, reverse_map, options_list, fallback_prefix="模式"):
+    if val is None:
+        return None
+    # 1. 直接查反向映射
+    res = reverse_map.get(val)
+    if res is not None:
+        return res
+    # 2. 尝试转成整数查找
+    if str(val).isdigit():
+        res = reverse_map.get(int(val))
+        if res is not None:
+            return res
+    # 3. 尝试转成字符串查找
+    res = reverse_map.get(str(val))
+    if res is not None:
+        return res
+    # 4. 如果值本身已经在合法选项列表中
+    if str(val) in options_list:
+        return str(val)
+    # 5. 无法识别的未知模式/程序，生成安全兜底名称
+    return f"{fallback_prefix} {val}"
+
+
 #: 「自定义」= 退出正在运行的预设模式（下发 value="0"），不是只读展示值。
 CUSTOM_MODE = "自定义"
 #: 预设模式选项（与小程序 / App 一致）。
@@ -214,9 +237,16 @@ class HisenseWasherProgramSelect(HisenseEntity, SelectEntity):
         self._attr_options = WASHER_PROGRAM_OPTIONS
 
     @property
+    def options(self) -> list[str]:
+        curr = self.current_option
+        if curr is not None and curr not in self._attr_options:
+            return list(self._attr_options) + [curr]
+        return self._attr_options
+
+    @property
     def current_option(self) -> str | None:
         prog_id = self.status.get("program")
-        return WASHER_PROGRAM_REVERSE_MAP.get(prog_id)
+        return _safe_lookup_option(prog_id, WASHER_PROGRAM_REVERSE_MAP, self._attr_options, "程序")
 
     async def async_select_option(self, option: str) -> None:
         if not self.status.get("power_on"):
@@ -493,11 +523,16 @@ class HisenseDryerProgramSelect(HisenseEntity, SelectEntity):
         self._attr_options = DRYER_PROGRAM_OPTIONS
 
     @property
+    def options(self) -> list[str]:
+        curr = self.current_option
+        if curr is not None and curr not in self._attr_options:
+            return list(self._attr_options) + [curr]
+        return self._attr_options
+
+    @property
     def current_option(self):
         val = self.status.get("program")
-        if val is None:
-            return None
-        return DRYER_PROGRAM_REVERSE_MAP.get(val, str(val))
+        return _safe_lookup_option(val, DRYER_PROGRAM_REVERSE_MAP, self._attr_options, "程序")
 
     async def async_select_option(self, option: str):
         mode_id = DRYER_PROGRAM_MAP.get(option)
@@ -524,11 +559,16 @@ class HisenseOvenModeSelect(HisenseEntity, SelectEntity):
         self._attr_options = OVEN_MODE_OPTIONS
 
     @property
+    def options(self) -> list[str]:
+        curr = self.current_option
+        if curr is not None and curr not in self._attr_options:
+            return list(self._attr_options) + [curr]
+        return self._attr_options
+
+    @property
     def current_option(self):
         val = self.status.get("work_mode")
-        if val is None:
-            return None
-        return OVEN_MODE_REVERSE_MAP.get(val, str(val))
+        return _safe_lookup_option(val, OVEN_MODE_REVERSE_MAP, self._attr_options, "模式")
 
     async def async_select_option(self, option: str):
         mode_id = OVEN_MODE_MAP.get(option)
@@ -554,11 +594,16 @@ class HisenseDishwasherProgramSelect(HisenseEntity, SelectEntity):
         self._attr_options = DISHWASHER_PROGRAM_OPTIONS
 
     @property
+    def options(self) -> list[str]:
+        curr = self.current_option
+        if curr is not None and curr not in self._attr_options:
+            return list(self._attr_options) + [curr]
+        return self._attr_options
+
+    @property
     def current_option(self):
         val = self.status.get("work_mode")
-        if val is None:
-            return None
-        return DISHWASHER_PROGRAM_REVERSE_MAP.get(val, str(val))
+        return _safe_lookup_option(val, DISHWASHER_PROGRAM_REVERSE_MAP, self._attr_options, "程序")
 
     async def async_select_option(self, option: str):
         mode_id = DISHWASHER_PROGRAM_MAP.get(option)
@@ -584,11 +629,16 @@ class HisenseHoodSpeedSelect(HisenseEntity, SelectEntity):
         self._attr_options = HOOD_SPEED_OPTIONS
 
     @property
+    def options(self) -> list[str]:
+        curr = self.current_option
+        if curr is not None and curr not in self._attr_options:
+            return list(self._attr_options) + [curr]
+        return self._attr_options
+
+    @property
     def current_option(self):
         val = self.status.get("fan_speed")
-        if val is None:
-            return None
-        return HOOD_SPEED_REVERSE_MAP.get(val, str(val))
+        return _safe_lookup_option(val, HOOD_SPEED_REVERSE_MAP, self._attr_options, "风速")
 
     async def async_select_option(self, option: str):
         speed = HOOD_SPEED_MAP.get(option)
@@ -612,11 +662,16 @@ class HisenseDehumidifierModeSelect(HisenseEntity, SelectEntity):
         self._attr_options = DEHUMIDIFIER_MODE_OPTIONS
 
     @property
+    def options(self) -> list[str]:
+        curr = self.current_option
+        if curr is not None and curr not in self._attr_options:
+            return list(self._attr_options) + [curr]
+        return self._attr_options
+
+    @property
     def current_option(self):
         val = self.status.get("work_mode")
-        if val is None:
-            return None
-        return DEHUMIDIFIER_MODE_REVERSE_MAP.get(val, str(val))
+        return _safe_lookup_option(val, DEHUMIDIFIER_MODE_REVERSE_MAP, self._attr_options, "模式")
 
     async def async_select_option(self, option: str):
         mode_id = DEHUMIDIFIER_MODE_MAP.get(option)
@@ -642,11 +697,16 @@ class HisenseFreshAirModeSelect(HisenseEntity, SelectEntity):
         self._attr_options = FRESH_AIR_MODE_OPTIONS
 
     @property
+    def options(self) -> list[str]:
+        curr = self.current_option
+        if curr is not None and curr not in self._attr_options:
+            return list(self._attr_options) + [curr]
+        return self._attr_options
+
+    @property
     def current_option(self):
         val = self.status.get("work_mode")
-        if val is None:
-            return None
-        return FRESH_AIR_MODE_REVERSE_MAP.get(val, str(val))
+        return _safe_lookup_option(val, FRESH_AIR_MODE_REVERSE_MAP, self._attr_options, "模式")
 
     async def async_select_option(self, option: str):
         mode_id = FRESH_AIR_MODE_MAP.get(option)

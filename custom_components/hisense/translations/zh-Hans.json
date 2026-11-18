@@ -66,6 +66,30 @@
     },
     "hisense_tv": {
       "name": "海信电视"
+    },
+    "hisense_oven": {
+      "name": "海信蒸烤箱"
+    },
+    "hisense_dishwasher": {
+      "name": "海信洗碗机"
+    },
+    "hisense_water_heater": {
+      "name": "海信热水器"
+    },
+    "hisense_hood": {
+      "name": "海信油烟机"
+    },
+    "hisense_stove": {
+      "name": "海信燃气灶"
+    },
+    "hisense_dehumidifier": {
+      "name": "海信除湿机"
+    },
+    "hisense_fresh_air": {
+      "name": "海信新风系统"
+    },
+    "hisense_wine_cabinet": {
+      "name": "海信酒柜"
     }
   },
   "entity": {
