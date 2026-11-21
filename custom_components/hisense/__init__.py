@@ -9,6 +9,9 @@ from .pyhisenseapi import HiSenseAC, HiSenseDryer, HiSenseFridge, HiSenseWasher
 
 
 async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.ConfigEntry):
+    if entry.data.get("region") == "EU":
+        from .eu import setup_entry
+        return await setup_entry(hass, entry)
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {}
     session = async_get_clientsession(hass)
@@ -163,6 +166,12 @@ async def async_unload_entry(hass: core.HomeAssistant, entry: config_entries.Con
         "binary_sensor",
         "select",
     ]
+    if entry.data.get("region") == "EU":
+        from .eu import PLATFORMS
+        unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+        if unload_ok:
+            hass.data[DOMAIN].pop(entry.entry_id, None)
+        return unload_ok
     unload_ok = await hass.config_entries.async_unload_platforms(entry, platforms)
     if unload_ok:
         for coordinator in hass.data[DOMAIN].get(entry.entry_id, {}).values():
