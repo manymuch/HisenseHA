@@ -65,9 +65,6 @@ Home Assistant 的本地配置存储中。会话失效后可在欧洲专用流�
 再观察设备并测试、恢复单个设置。安装不会发送控制命令。请勿分享账户密码、
 令牌或原始 HTTP 调试日志。
 
-可运行 `python -m unittest discover -s tests -v` 执行离线测试。
-这些测试使用模拟响应及轻量 Home Assistant 替身，不是完整的 Home Assistant 运行环境测试。
-
 ## 状态同步
 
 本集成与海信 **AIHome 云端** 通信。设备状态会在初始化、实体操作后或按下「刷新状态」时读取。

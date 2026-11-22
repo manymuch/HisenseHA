@@ -7,7 +7,7 @@ from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.exceptions import HomeAssistantError
 
-from .ayla_eu import AylaError, FANS, MODES
+from .ayla_eu import FANS, MODES
 from .entity import HisenseEntity
 
 
@@ -43,21 +43,14 @@ class EuropeanClimate(HisenseEntity, ClimateEntity):
     def fan_mode(self):
         return self.status.get("fan_mode")
 
-    async def _command(self, setting, value):
-        try:
-            await self.client.command(setting, value)
-        except AylaError:
-            raise HomeAssistantError("European command failed; refresh state before retrying") from None
-        self.coordinator.async_update_from_client()
-
     async def async_set_temperature(self, **kwargs):
         if "hvac_mode" in kwargs:
             await self.async_set_hvac_mode(kwargs["hvac_mode"])
         if ATTR_TEMPERATURE in kwargs:
-            await self._command("temperature", kwargs[ATTR_TEMPERATURE])
+            await self.coordinator.async_command("temperature", kwargs[ATTR_TEMPERATURE])
 
     async def async_set_fan_mode(self, fan_mode):
-        await self._command("fan", fan_mode)
+        await self.coordinator.async_command("fan", fan_mode)
 
     async def async_set_hvac_mode(self, hvac_mode):
         if hvac_mode == HVACMode.OFF:
@@ -65,15 +58,15 @@ class EuropeanClimate(HisenseEntity, ClimateEntity):
             return
         if hvac_mode not in MODES:
             raise HomeAssistantError("Unsupported European HVAC mode")
-        await self._command("mode", hvac_mode)
+        await self.coordinator.async_command("mode", hvac_mode)
         if not self.status.get("power_on"):
             await self.async_turn_on()
 
     async def async_turn_on(self):
-        await self._command("power", True)
+        await self.coordinator.async_command("power", True)
 
     async def async_turn_off(self):
-        await self._command("power", False)
+        await self.coordinator.async_command("power", False)
 
 
 class EuropeanScreen(HisenseEntity, SwitchEntity):
@@ -92,18 +85,11 @@ class EuropeanScreen(HisenseEntity, SwitchEntity):
         prop = self.client.properties.get("t_backlight", {})
         return super().available and prop.get("read_only") is False and prop.get("direction") == "input"
 
-    async def _set(self, value):
-        try:
-            await self.client.command("screen", value)
-        except AylaError:
-            raise HomeAssistantError("European display command failed") from None
-        self.coordinator.async_update_from_client()
-
     async def async_turn_on(self, **kwargs):
-        await self._set(True)
+        await self.coordinator.async_command("screen", True)
 
     async def async_turn_off(self, **kwargs):
-        await self._set(False)
+        await self.coordinator.async_command("screen", False)
 
 
 class EuropeanRefresh(HisenseEntity, ButtonEntity):
@@ -114,7 +100,12 @@ class EuropeanRefresh(HisenseEntity, ButtonEntity):
     def __init__(self, coordinator):
         super().__init__(coordinator, "force_update_button", "force_update")
 
+    @property
+    def available(self) -> bool:
+        """Allow users to retry after a failed refresh."""
+        return True
+
     async def async_press(self):
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_refresh()
         if not self.coordinator.last_update_success:
             raise HomeAssistantError("Failed to refresh European device status")

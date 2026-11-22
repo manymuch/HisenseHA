@@ -73,13 +73,6 @@ need field validation. Before enabling automations, compare the entity state wit
 the mobile app, then test and restore the display or one setting while observing
 the appliance. Installing the integration does not send setting commands.
 
-Offline API, codec and setup-contract tests use synthetic responses and lightweight
-Home Assistant substitutes, rather than a full Home Assistant test instance:
-
-```shell
-python -m unittest discover -s tests -v
-```
-
 ## Status sync
 
 This integration talks to the **Hisense AIHome cloud**. Device state is read during setup, after entity actions, and when you press **Force refresh**. There is no periodic polling. 
