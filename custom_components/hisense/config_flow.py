@@ -3,7 +3,7 @@ from homeassistant import config_entries
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.selector import TextSelector, TextSelectorConfig, TextSelectorType
-from .const import DOMAIN, CONF_USERNAME, CONF_PASSWORD
+from .const import DOMAIN, CONF_USERNAME, CONF_PASSWORD, ROOM_CONTROLLER_TYPE
 from .pyhisenseapi import HiSenseLogin
 
 class HisenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -131,7 +131,9 @@ class HisenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         for device_id, info in self._device_info.items():
             label = info.get("label", device_id)
             device_type = info.get("device_type", "")
-            device_id_to_label[device_id] = f"{label} ({device_type})"
+            device_id_to_label[device_id] = (
+                label if device_type == ROOM_CONTROLLER_TYPE else f"{label} ({device_type})"
+            )
 
         data_schema = vol.Schema(
             {

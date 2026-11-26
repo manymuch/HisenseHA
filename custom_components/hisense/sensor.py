@@ -9,7 +9,7 @@ from homeassistant.components.sensor import (
 from homeassistant.const import EntityCategory, UnitOfEnergy, UnitOfTemperature, UnitOfTime
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
+from .const import DOMAIN, ROOM_CONTROLLER_TYPE
 from .entity import HisenseEntity
 
 AC_ENERGY_SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
@@ -201,6 +201,11 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         for desc in AC_ENERGY_SENSOR_DESCRIPTIONS
     ]
     async_add_entities(sensors)
+    async_add_entities(
+        HisenseRoomTemperatureSensor(coordinator)
+        for coordinator in coordinators.values()
+        if coordinator.device_type == ROOM_CONTROLLER_TYPE
+    )
 
     fridge_coordinators = [
         c for c in coordinators.values() if c.device_type == "冰箱"
@@ -236,6 +241,22 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         for coordinator in dryer_coordinators
         for description in DRYER_SENSOR_DESCRIPTIONS
     )
+
+
+class HisenseRoomTemperatureSensor(HisenseEntity, SensorEntity):
+    """Expose the measured room temperature in degrees Celsius."""
+
+    _attr_translation_key = "room_temperature"
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "indoor_temperature", "indoor_temperature")
+
+    @property
+    def native_value(self):
+        return self.status.get("indoor_temperature")
 
 
 class HisenseFridgeSensor(HisenseEntity, SensorEntity):

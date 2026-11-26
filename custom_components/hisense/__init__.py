@@ -1,17 +1,83 @@
 import asyncio
 
+import aiohttp
+
 from homeassistant import config_entries, core
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import CONF_PASSWORD, CONF_USERNAME, DOMAIN
+from .const import CONF_PASSWORD, CONF_USERNAME, DOMAIN, ROOM_CONTROLLER_TYPE
 from .coordinator import HisenseDataUpdateCoordinator
-from .pyhisenseapi import HiSenseAC, HiSenseDryer, HiSenseFridge, HiSenseWasher
+from .pyhisenseapi import (
+    HiSenseAC,
+    HiSenseDryer,
+    HiSenseFridge,
+    HiSenseLogin,
+    HiSenseRoomController,
+    HiSenseWasher,
+)
+
+
+async def _async_restore_room_controller_names(
+    hass: core.HomeAssistant,
+    entry: config_entries.ConfigEntry,
+    session: aiohttp.ClientSession,
+) -> None:
+    """Populate nicknames for room controllers configured before this field was saved."""
+    devices = entry.data["devices"]
+    pending = [
+        device
+        for device in devices
+        if device.get("device_type") == ROOM_CONTROLLER_TYPE and "nickname" not in device
+    ]
+    if not pending:
+        return
+
+    accounts = {
+        device["home_id"]: device
+        for device in pending
+        if device.get("home_id") and device.get("access_token") and device.get("customer_id")
+    }
+    found = {}
+    login = HiSenseLogin(session)
+    for home_id, account in accounts.items():
+        try:
+            async with asyncio.timeout(12):
+                discovered = await login.get_all_devices(
+                    account["access_token"],
+                    home_id,
+                    account.get("refresh_token"),
+                    account["customer_id"],
+                )
+        except (aiohttp.ClientError, TimeoutError, ValueError):
+            continue
+        if discovered:
+            found.update({(home_id, device_id): info for device_id, info in discovered.items()})
+
+    updated = {}
+    for device in pending:
+        device_id = device["device_id"]
+        if (info := found.get((device.get("home_id"), device_id))) and "nickname" in info:
+            updated[device_id] = {
+                **device,
+                "nickname": info["nickname"],
+                "device_name": info["device_name"],
+                "label": info["label"],
+            }
+    if updated:
+        hass.config_entries.async_update_entry(
+            entry,
+            data={
+                **entry.data,
+                "devices": [updated.get(device["device_id"], device) for device in devices],
+            },
+        )
 
 
 async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.ConfigEntry):
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {}
     session = async_get_clientsession(hass)
+    await _async_restore_room_controller_names(hass, entry, session)
     clients = []
     coordinators = []
     token_lock = asyncio.Lock()
@@ -53,7 +119,9 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
 
         # 组合显示名。device_type_name 在部分机型上会回退成产品型号（与
         # device_name 相同），此时不要重复拼接成 "型号_型号"。
-        if device_type_name and device_name:
+        if device_type == ROOM_CONTROLLER_TYPE:
+            friendly_name = device_name or ROOM_CONTROLLER_TYPE
+        elif device_type_name and device_name:
             if device_type_name == device_name:
                 friendly_name = device_name
             else:
@@ -114,7 +182,10 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
                 token_lock=token_lock,
             )
         else:
-            client = HiSenseAC(
+            client_class = (
+                HiSenseRoomController if device_type == ROOM_CONTROLLER_TYPE else HiSenseAC
+            )
+            client = client_class(
                 wifi_id=wifi_id,
                 device_id=device_id,
                 refresh_token=refresh_token,

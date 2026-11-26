@@ -42,6 +42,8 @@ Click the button above, or manually:
 4. Choose the **home** that contains your device.
 5. Select one or more **devices**, then finish the wizard.
 
+The central-system room temperature controller (`hitachiRoomTemperatureController`) exposes a read-only room temperature sensor and uses its Hisense app nickname when available.
+
 ## Status sync
 
 This integration talks to the **Hisense AIHome cloud**. Device state is read during setup, after entity actions, and when you press **Force refresh**. There is no periodic polling. 
