@@ -58,8 +58,8 @@ The European climate entity provides power, cool/heat/dry/fan-only/auto modes,
 16–32 °C setpoints in whole degrees, room temperature and seven fan settings
 (auto, quiet, super-low, low, medium, high and super-high). A separate switch
 controls the display. Swing, timers and auxiliary heating are not exposed.
-Use **Force refresh** for changes made in the app or with the remote; there is no
-periodic polling. Cloud acceptance of a command is not physical confirmation.
+State is read from the cloud every 5 minutes, and **Force refresh** reads it
+immediately (for example after changes made in the app or with the remote). Cloud acceptance of a command is not physical confirmation.
 
 The password is used only during European setup or reauthentication and is not
 stored in the entry. Access and refresh tokens are stored in Home Assistant's

@@ -1,5 +1,6 @@
 """Home Assistant setup for the additional European backend."""
 import logging
+from datetime import timedelta
 
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -10,6 +11,7 @@ from .const import DOMAIN
 
 PLATFORMS = ["climate", "switch", "button"]
 _LOGGER = logging.getLogger(__name__)
+SCAN_INTERVAL = timedelta(minutes=5)
 _REAUTH_MESSAGE = "Sign in to HiSmart Life Europe again"
 
 
@@ -18,7 +20,7 @@ class EuropeanCoordinator(DataUpdateCoordinator):
         self.client = client
         self.device_type = "空调"
         super().__init__(
-            hass, _LOGGER, config_entry=entry, name="Hisense Europe", update_interval=None
+            hass, _LOGGER, config_entry=entry, name="Hisense Europe", update_interval=SCAN_INTERVAL
         )
 
     async def _async_update_data(self):
