@@ -151,6 +151,9 @@
       }
     },
     "sensor": {
+      "room_temperature": {
+        "name": "Current room temperature"
+      },
       "fridge_refrigerator_temperature": {
         "name": "Temperature - Refrigerator (actual)"
       },

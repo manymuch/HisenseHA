@@ -12,7 +12,13 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
-from .pyhisenseapi import HiSenseAC, HiSenseDryer, HiSenseFridge, HiSenseWasher
+from .pyhisenseapi import (
+    HiSenseAC,
+    HiSenseDryer,
+    HiSenseFridge,
+    HiSenseRoomController,
+    HiSenseWasher,
+)
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -39,7 +45,7 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def __init__(
         self,
         hass: HomeAssistant,
-        client: HiSenseAC | HiSenseDryer | HiSenseFridge | HiSenseWasher,
+        client: HiSenseAC | HiSenseDryer | HiSenseFridge | HiSenseRoomController | HiSenseWasher,
         device_type: str = "空调",
         entry=None,
     ) -> None:

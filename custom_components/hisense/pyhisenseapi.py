@@ -4,11 +4,13 @@ from collections import Counter
 import hashlib
 import json
 import logging
+import math
 import time
 import uuid
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
+from .const import ROOM_CONTROLLER_MODEL, ROOM_CONTROLLER_TYPE
 from .fridge_const import (
     DBD_DEGERMING,
     FREEZE_SET_TEMP_MAX,
@@ -242,6 +244,10 @@ class HiSenseLogin:
                 or product.get("name")
                 or ""
             ).strip()
+            nickname = None
+            if device_type == ROOM_CONTROLLER_TYPE:
+                nickname = str(device.get("nickname") or "").strip()
+                device_name = nickname or device_name
             label = device_name or device_id
             raw_labels[device_id] = label
             devices[device_id] = {
@@ -261,15 +267,26 @@ class HiSenseLogin:
                 ),
                 "device_name": device_name,
                 "device_code": str(
-                    device.get("deviceCode") or product.get("code") or ""
+                    device.get("deviceCode")
+                    or product.get("code")
+                    or (ROOM_CONTROLLER_MODEL if device_type == ROOM_CONTROLLER_TYPE else "")
                 ),
                 "label": label,
             }
 
+            if nickname is not None:
+                devices[device_id]["nickname"] = nickname
+
         counts = Counter(raw_labels.values())
         for device_id, label in raw_labels.items():
             if counts[label] > 1:
-                devices[device_id]["label"] = f"{label} ({device_id[-6:]})"
+                device = devices[device_id]
+                suffix = (
+                    device_id
+                    if device["device_type"] == ROOM_CONTROLLER_TYPE
+                    else device_id[-6:]
+                )
+                device["label"] = f"{label} ({suffix})"
         return devices
 
     async def get_device_wifi_id_and_labels(
@@ -309,6 +326,11 @@ def _device_type_from_name(device_type_name) -> str | None:
 
 def _device_type(device: dict) -> str | None:
     product = device.get("product") or {}
+    if (
+        device.get("categoryCode") == "connector.device.type.watersystem.central"
+        and ROOM_CONTROLLER_MODEL in (product.get("code"), device.get("productCode"))
+    ):
+        return ROOM_CONTROLLER_TYPE
     device_type = _device_type_from_name(
         " ".join(
             str(value or "")
@@ -1427,6 +1449,30 @@ class HiSenseAC(_HiSenseDevice):
 
     async def get_energy(self):
         return await self.refresh_energy()
+
+
+class HiSenseRoomController(_HiSenseDevice):
+    """Read ambient temperature from the central-system room controller."""
+
+    def _update_from_states(self, states: dict) -> set[str]:
+        updated = super()._update_from_states(states)
+        temperature = None
+        for key in (
+            "realTemperature",
+            "indoorTemperature",
+            "roomTemperature",
+            "currentTemperature",
+        ):
+            raw_value = states.get(key)
+            if isinstance(raw_value, bool):
+                continue
+            value = _as_number(raw_value)
+            if value is not None and math.isfinite(value):
+                temperature = value
+                break
+
+        self.status["indoor_temperature"] = temperature
+        return updated | {"indoor_temperature"}
 
 
 class HiSenseFridge(_HiSenseDevice):

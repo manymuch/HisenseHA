@@ -151,6 +151,9 @@
       }
     },
     "sensor": {
+      "room_temperature": {
+        "name": "当前室温"
+      },
       "fridge_refrigerator_temperature": {
         "name": "温度-冷藏室实际"
       },

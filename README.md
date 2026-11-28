@@ -42,6 +42,8 @@ Click the button above, or manually:
 4. Choose the **home** that contains your device.
 5. Select one or more **devices**, then finish the wizard.
 
+The central-system room temperature controller (`hitachiRoomTemperatureController`) exposes a read-only room temperature sensor and uses its Hisense app nickname when available.
+
 ## European HiSmart Life accounts
 
 During setup, choose **Europe (HiSmart Life / Ayla)** for an account used by the

@@ -45,6 +45,8 @@
 5. 勾选要添加的一台或多台 **设备**，完成向导。
 
 
+支持中央系统室温线控器（`hitachiRoomTemperatureController`）的只读室温传感器，有昵称时沿用海信爱家中的设备名称。
+
 ## 欧洲 HiSmart Life 账户
 
 添加集成时选择 **Europe (HiSmart Life / Ayla)**，使用欧洲 HiSmart Life
