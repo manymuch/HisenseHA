@@ -15,6 +15,7 @@ from .pyhisenseapi import (
     HiSenseLogin,
     HiSenseRoomController,
     HiSenseWasher,
+    HiSenseWaterHeater,
 )
 
 
@@ -182,9 +183,10 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
                 token_lock=token_lock,
             )
         else:
-            client_class = (
-                HiSenseRoomController if device_type == ROOM_CONTROLLER_TYPE else HiSenseAC
-            )
+            client_class = {
+                ROOM_CONTROLLER_TYPE: HiSenseRoomController,
+                "热水器": HiSenseWaterHeater,
+            }.get(device_type, HiSenseAC)
             client = client_class(
                 wifi_id=wifi_id,
                 device_id=device_id,
@@ -222,6 +224,7 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
         "sensor",
         "binary_sensor",
         "select",
+        "water_heater",
     ]
     await hass.config_entries.async_forward_entry_setups(entry, platforms)
     if pending_names:
@@ -241,6 +244,7 @@ async def async_unload_entry(hass: core.HomeAssistant, entry: config_entries.Con
         "sensor",
         "binary_sensor",
         "select",
+        "water_heater",
     ]
     if entry.data.get("region") == "EU":
         from .eu import PLATFORMS

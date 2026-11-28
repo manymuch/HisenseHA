@@ -18,6 +18,7 @@ from .pyhisenseapi import (
     HiSenseFridge,
     HiSenseRoomController,
     HiSenseWasher,
+    HiSenseWaterHeater,
 )
 
 
@@ -26,17 +27,16 @@ _CONTROL_REFRESH_DELAY = 1.0
 _RETRY_DELAY = 60.0
 _MAX_ATTEMPTS = 3
 
-#: 冰箱定时轮询间隔（秒）。
+#: 冰箱和热水器定时轮询间隔（秒）。
 #:
-#: 冰箱是唯一"人不在跟前、状态却要主动看"的设备：门有没有关严、除菌跑完没有、
+#: 冰箱需要主动读取状态：门有没有关严、除菌跑完没有、
 #: 压缩机停没停，这些都不会因为用户操作 HA 而触发回读。没有轮询时，这些状态
 #: 只会在 HA 启动/重载或手动点「强制更新」时刷新，门开了几个小时都不会报警。
 #:
 #: 60 秒是折中：设备上报云端本身有节流（抓包里 reportTime 比请求时间晚约 1 分钟），
 #: 轮询再快也拿不到更新的数据，只会白耗请求额度。空调/洗衣机保持原来的
 #: 事件驱动（不轮询），因为它们的操作都发生在 HA 里，控制后 1 秒就会回读。
-_FRIDGE_SCAN_INTERVAL = 60
-
+_STATE_SCAN_INTERVAL = 60
 
 
 class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -45,7 +45,10 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def __init__(
         self,
         hass: HomeAssistant,
-        client: HiSenseAC | HiSenseDryer | HiSenseFridge | HiSenseRoomController | HiSenseWasher,
+        client: (
+            HiSenseAC | HiSenseDryer | HiSenseFridge | HiSenseRoomController
+            | HiSenseWasher | HiSenseWaterHeater
+        ),
         device_type: str = "空调",
         entry=None,
     ) -> None:
@@ -61,8 +64,8 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER,
             name=f"{DOMAIN}_{client.device_id}",
             update_interval=(
-                timedelta(seconds=_FRIDGE_SCAN_INTERVAL)
-                if device_type == "冰箱"
+                timedelta(seconds=_STATE_SCAN_INTERVAL)
+                if device_type in ("冰箱", "热水器")
                 else None
             ),
         )

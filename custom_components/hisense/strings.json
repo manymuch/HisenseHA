@@ -71,6 +71,9 @@
     },
     "hisense_dryer": {
       "name": "Hisense Dryer"
+    },
+    "hisense_water_heater": {
+      "name": "Hisense Water Heater"
     }
   },
   "entity": {

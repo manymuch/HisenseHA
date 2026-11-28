@@ -8,6 +8,7 @@ import math
 import time
 import uuid
 
+from aiohttp import ClientError
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from .const import ROOM_CONTROLLER_MODEL, ROOM_CONTROLLER_TYPE
@@ -248,11 +249,14 @@ class HiSenseLogin:
             if device_type == ROOM_CONTROLLER_TYPE:
                 nickname = str(device.get("nickname") or "").strip()
                 device_name = nickname or device_name
+            wifi_id = device.get("wifiId")
+            if not wifi_id and device_type == "热水器":
+                wifi_id = device.get("comModuleId")
             label = device_name or device_id
             raw_labels[device_id] = label
             devices[device_id] = {
                 "device_id": device_id,
-                "wifi_id": str(device.get("wifiId") or ""),
+                "wifi_id": str(wifi_id or ""),
                 "home_id": str(home_id),
                 "refresh_token": refresh_token,
                 "access_token": str(access_token),
@@ -321,6 +325,13 @@ def _device_type_from_name(device_type_name) -> str | None:
         return "洗衣机"
     if "dryer" in text or "干衣" in text or "烘干" in text:
         return "干衣机"
+    if (
+        "waterheater" in text
+        or "water_heater" in text
+        or "water heater" in text
+        or "热水器" in text
+    ):
+        return "热水器"
     return None
 
 
@@ -1816,3 +1827,90 @@ class HiSenseFridge(_HiSenseDevice):
             return lower
         return max(lower, min(upper, number))
 
+
+class HiSenseWaterHeater(_HiSenseDevice):
+    """AIHome storage water heater."""
+
+    MIN_TEMPERATURE = 30
+    MAX_TEMPERATURE = 75
+    REMOTE_LOGIC_URL = "https://api-wg.hismarttv.com/agw/dsg/outer/uploadRemoteLogicCmd"
+
+    def _update_from_states(self, states: dict) -> set[str]:
+        fields = {
+            "powerStatus": ("power_on", _as_bool),
+            "realWaterTemperature": ("current_temperature", _as_number),
+            "setWaterTemperature": ("target_temperature", _as_number),
+            "workMode": ("work_mode", _as_int),
+        }
+        updates = {
+            key: convert(states[field])
+            for field, (key, convert) in fields.items()
+            if field in states
+        }
+        self.status.update(updates)
+        return set(updates)
+
+    async def turn_on(self):
+        return await self._send_aihome_action(
+            "connector.device.command.Power",
+            {"onAndOff": {"value": "1"}},
+        )
+
+    async def turn_off(self):
+        return await self._send_aihome_action(
+            "connector.device.command.Power",
+            {"onAndOff": {"value": "0"}},
+        )
+
+    async def set_temperature(self, temperature):
+        if not self.MIN_TEMPERATURE <= temperature <= self.MAX_TEMPERATURE:
+            return False
+        temperature = round(temperature)
+        if not await self._send_remote_logic_command(5, temperature):
+            return False
+        self._set_pending_status({"target_temperature": temperature})
+        return True
+
+    async def set_mode(self, mode_id):
+        if not await self._send_remote_logic_command(4, mode_id):
+            return False
+        self._set_pending_status({"work_mode": mode_id})
+        return True
+
+    async def _send_remote_logic_command(self, command_id, value):
+        device_prefix, separator, device_suffix = self.device_id.rpartition(":")
+        wifi_id = self.wifi_id or device_prefix
+        if not wifi_id or not await self.refresh():
+            return False
+        params = {
+            "format": "1", "nouncestr": uuid.uuid4().hex,
+            "timeStamp": int(time.time()), "timezone": "28800",
+            "version": "8.0", "accessToken": self.access_token,
+            "sourceType": "1", "appType": "0",
+            "languageId": "0", "signVersion": "0",
+        }
+        payload = {
+            "cmdList": [{"cmdOrder": 1, "cmdId": command_id, "cmdParm": value}],
+            "wifiId": wifi_id,
+            "deviceId": device_suffix if separator else self.device_id,
+            "homeId": self.home_id, "cmdVersion": 1,
+            "extendParm": "", "accessToken": self.access_token,
+            "customerId": self.customer_id,
+        }
+        headers = {
+            "Content-Type": "application/json;charset=UTF-8",
+            "User-Agent": "okhttp/3.12.13-1.1",
+            "Accept": "application/json",
+        }
+        try:
+            async with self.session.post(
+                self.REMOTE_LOGIC_URL, params=params, headers=headers,
+                data=json.dumps(payload, separators=(",", ":"), ensure_ascii=False),
+            ) as response:
+                if response.status != 200:
+                    return False
+                result = await response.json()
+        except (ClientError, TimeoutError, ValueError):
+            return False
+        reply = result.get("response") if isinstance(result, dict) else None
+        return isinstance(reply, dict) and str(reply.get("resultCode")) == "0"

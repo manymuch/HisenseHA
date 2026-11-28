@@ -71,6 +71,9 @@
     },
     "hisense_dryer": {
       "name": "海信干衣机"
+    },
+    "hisense_water_heater": {
+      "name": "海信热水器"
     }
   },
   "entity": {
