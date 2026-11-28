@@ -44,6 +44,37 @@ Click the button above, or manually:
 
 The central-system room temperature controller (`hitachiRoomTemperatureController`) exposes a read-only room temperature sensor and uses its Hisense app nickname when available.
 
+## European HiSmart Life accounts
+
+During setup, choose **Europe (HiSmart Life / Ayla)** for an account used by the
+European HiSmart Life Android app. This uses Ayla's European user and device
+services rather than the Chinese AIHome API. The default **China (HisenseHA)**
+choice and existing entries without a region keep their original behavior.
+
+European support currently requires the exact **Smart-1-110** split-unit profile.
+This profile was confirmed on a Hisense TQ35XE0CG. Other profiles, portable units,
+refrigerators, washers and dryers are not enabled through the European backend.
+The European flow selects devices directly, without the AIHome home-selection step.
+
+The European climate entity provides power, cool/heat/dry/fan-only/auto modes,
+16–32 °C setpoints in whole degrees, room temperature and seven fan settings
+(auto, quiet, super-low, low, medium, high and super-high). A separate switch
+controls the display. Swing, timers and auxiliary heating are not exposed.
+State is read from the cloud every 5 minutes, and **Force refresh** reads it
+immediately (for example after changes made in the app or with the remote). Cloud acceptance of a command is not physical confirmation.
+
+The password is used only during European setup or reauthentication and is not
+stored in the entry. Access and refresh tokens are stored in Home Assistant's
+normal local config-entry storage and refreshed automatically. An expired login
+opens a European reauthentication flow that checks the configured devices belong
+to the account. Do not share credentials, config-entry storage or HTTP debug logs.
+
+European login, device discovery, property reads and Home Assistant entry loading
+were checked on a real account. Physical controls and live token renewal still
+need field validation. Before enabling automations, compare the entity state with
+the mobile app, then test and restore the display or one setting while observing
+the appliance. Installing the integration does not send setting commands.
+
 ## Status sync
 
 This integration talks to the **Hisense AIHome cloud**. Device state is read during setup, after entity actions, and when you press **Force refresh**. There is no periodic polling. 

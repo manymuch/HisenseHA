@@ -3,6 +3,7 @@ import asyncio
 import aiohttp
 
 from homeassistant import config_entries, core
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import CONF_PASSWORD, CONF_USERNAME, DOMAIN, ROOM_CONTROLLER_TYPE
@@ -20,66 +21,65 @@ from .pyhisenseapi import (
 async def _async_restore_room_controller_names(
     hass: core.HomeAssistant,
     entry: config_entries.ConfigEntry,
-    session: aiohttp.ClientSession,
+    pending: dict[str, HiSenseRoomController],
 ) -> None:
-    """Populate nicknames for room controllers configured before this field was saved."""
-    devices = entry.data["devices"]
-    pending = [
-        device
-        for device in devices
-        if device.get("device_type") == ROOM_CONTROLLER_TYPE and "nickname" not in device
-    ]
-    if not pending:
-        return
-
-    accounts = {
-        device["home_id"]: device
-        for device in pending
-        if device.get("home_id") and device.get("access_token") and device.get("customer_id")
+    """Backfill old nicknames without delaying entry setup."""
+    homes = {
+        client.home_id: client
+        for client in pending.values()
+        if client.access_token and client.customer_id
     }
-    found = {}
-    login = HiSenseLogin(session)
-    for home_id, account in accounts.items():
+    devices_by_home = {}
+    for home_id, client in homes.items():
         try:
-            async with asyncio.timeout(12):
-                discovered = await login.get_all_devices(
-                    account["access_token"],
-                    home_id,
-                    account.get("refresh_token"),
-                    account["customer_id"],
+            async with asyncio.timeout(5):
+                discovered = await HiSenseLogin(client.session).get_all_devices(
+                    client.access_token, home_id, client.refresh_token, client.customer_id
                 )
         except (aiohttp.ClientError, TimeoutError, ValueError):
             continue
         if discovered:
-            found.update({(home_id, device_id): info for device_id, info in discovered.items()})
+            devices_by_home[home_id] = discovered
 
-    updated = {}
-    for device in pending:
+    if not devices_by_home:
+        return
+
+    registry = dr.async_get(hass)
+    devices = entry.data["devices"]
+    updated_devices = []
+    for device in devices:
         device_id = device["device_id"]
-        if (info := found.get((device.get("home_id"), device_id))) and "nickname" in info:
-            updated[device_id] = {
-                **device,
-                "nickname": info["nickname"],
-                "device_name": info["device_name"],
-                "label": info["label"],
-            }
-    if updated:
+        if device_id in pending and "nickname" not in device:
+            info = devices_by_home.get(device.get("home_id"), {}).get(device_id, {})
+            if "nickname" in info:
+                device = {
+                    **device,
+                    "nickname": info["nickname"],
+                    "device_name": info["device_name"],
+                    "label": info["label"],
+                }
+                if nickname := info["nickname"]:
+                    pending[device_id].device_name = nickname
+                    if registered := registry.async_get_device(identifiers={(DOMAIN, device_id)}):
+                        registry.async_update_device(registered.id, name=nickname)
+        updated_devices.append(device)
+
+    if updated_devices != devices:
         hass.config_entries.async_update_entry(
-            entry,
-            data={
-                **entry.data,
-                "devices": [updated.get(device["device_id"], device) for device in devices],
-            },
+            entry, data={**entry.data, "devices": updated_devices}
         )
 
 
 async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.ConfigEntry):
+    if entry.data.get("region") == "EU":
+        from .eu import setup_entry
+        return await setup_entry(hass, entry)
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {}
     session = async_get_clientsession(hass)
-    await _async_restore_room_controller_names(hass, entry, session)
     clients = []
     coordinators = []
+    pending_names: dict[str, HiSenseRoomController] = {}
     token_lock = asyncio.Lock()
 
     def save_tokens(access_token, refresh_token, customer_id):
@@ -202,6 +202,9 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
                 token_lock=token_lock,
             )
 
+        if device_type == ROOM_CONTROLLER_TYPE and home_id and "nickname" not in device_info:
+            pending_names[device_id] = client
+
         clients.append(client)
         coordinator = HisenseDataUpdateCoordinator(hass, client, device_type, entry)
         client.on_auth_failure = coordinator.async_start_refresh
@@ -221,6 +224,11 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
         "select",
     ]
     await hass.config_entries.async_forward_entry_setups(entry, platforms)
+    if pending_names:
+        entry.async_create_background_task(
+            hass, _async_restore_room_controller_names(hass, entry, pending_names),
+            "Hisense room controller nickname backfill",
+        )
     return True
 
 
@@ -234,6 +242,12 @@ async def async_unload_entry(hass: core.HomeAssistant, entry: config_entries.Con
         "binary_sensor",
         "select",
     ]
+    if entry.data.get("region") == "EU":
+        from .eu import PLATFORMS
+        unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+        if unload_ok:
+            hass.data[DOMAIN].pop(entry.entry_id, None)
+        return unload_ok
     unload_ok = await hass.config_entries.async_unload_platforms(entry, platforms)
     if unload_ok:
         for coordinator in hass.data[DOMAIN].get(entry.entry_id, {}).values():

@@ -6,7 +6,8 @@
         "description": "使用海信爱家的手机号和密码登录",
         "data": {
           "username": "海信爱家登录用户手机号",
-          "password": "如果没有登录密码请先去海信爱家App里设置一个"
+          "password": "如果没有登录密码请先去海信爱家App里设置一个",
+          "region": "云服务区域"
         }
       },
       "home": {
@@ -24,6 +25,21 @@
           "username": "海信爱家登录用户手机号",
           "password": "海信爱家登录密码"
         }
+      },
+      "eu_device": {
+        "title": "选择欧洲设备",
+        "description": "目前仅支持 Smart-1-110 分体空调。",
+        "data": {
+          "device_ids": "设备"
+        }
+      },
+      "eu_reauth": {
+        "title": "重新登录 HiSmart Life 欧洲账户",
+        "description": "仅保存访问令牌和刷新令牌，不保存密码。",
+        "data": {
+          "username": "电子邮箱",
+          "password": "密码"
+        }
       }
     },
     "error": {
@@ -32,9 +48,16 @@
       "no_devices": "没有找到支持的海信设备",
       "no_homes": "此账号下没有找到家庭",
       "wrong_account": "此账号下找不到已配置的设备",
-      "unknown": "发生未知错误"
+      "unknown": "发生未知错误",
+      "eu_unsupported_profile": "此欧洲账户中没有找到 Smart-1-110 设备。",
+      "eu_account_mismatch": "此账户不包含已配置的欧洲设备。"
     },
-    "title": "海信智能设备"
+    "title": "海信智能设备",
+    "abort": {
+      "eu_reauth_only": "此重新认证流程仅支持欧洲账户。",
+      "reauth_successful": "重新认证成功。",
+      "already_configured": "此账户已配置。"
+    }
   },
   "device": {
     "hisense_ac": {
