@@ -12,6 +12,10 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     coordinators = hass.data[DOMAIN][config_entry.entry_id]
+    if config_entry.data.get("region") == "EU":
+        from .eu_entities import EuropeanScreen
+        async_add_entities([EuropeanScreen(c) for c in coordinators.values()])
+        return
     ac_coordinators = [
         c for c in coordinators.values() if c.device_type == "空调"
     ]
@@ -37,12 +41,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
             ("QUIET", "fridge_quiet_mode"),
         ):
             _add_fridge_ai_switch(coordinator, async_add_entities, mode, key, config_entry)
-    
-    # 为热水器添加独立的电源开关
-    wh_coordinators = [c for c in coordinators.values() if c.device_type == "热水器"]
-    async_add_entities(
-        HisenseWaterHeaterPowerSwitch(coordinator) for coordinator in wh_coordinators
-    )
+
 
 
 def _add_fridge_degerming_switch(coordinator, async_add_entities):
@@ -303,31 +302,3 @@ class PromptSoundSwitch(HisenseEntity, SwitchEntity):
             self.coordinator.async_update_from_client()
             return
         raise HomeAssistantError("Failed to turn off Hisense AC prompt sound")
-
-class HisenseWaterHeaterPowerSwitch(HisenseEntity, SwitchEntity):
-    """为热水器提供独立的电源开关实体。"""
-
-    _attr_name = "Power"
-    _attr_icon = "mdi:power"
-
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "water_heater_power", "water_heater_power")
-
-    @property
-    def is_on(self) -> bool:
-        """返回当前电源状态。"""
-        return self.status.get("power_on", False)
-
-    async def async_turn_on(self, **kwargs):
-        """开机。"""
-        if await self.client.turn_on():
-            self.coordinator.async_update_from_client()
-        else:
-            raise HomeAssistantError("开机失败")
-
-    async def async_turn_off(self, **kwargs):
-        """关机。"""
-        if await self.client.turn_off():
-            self.coordinator.async_update_from_client()
-        else:
-            raise HomeAssistantError("关机失败")

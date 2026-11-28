@@ -6,7 +6,8 @@
         "description": "Login with App username and password",
         "data": {
           "username": "App login username, could be the phone number",
-          "password": "App login password, if not available set it in the app first"
+          "password": "App login password, if not available set it in the app first",
+          "region": "Cloud region"
         }
       },
       "home": {
@@ -24,6 +25,21 @@
           "username": "AIHome username",
           "password": "AIHome password"
         }
+      },
+      "eu_device": {
+        "title": "Select European devices",
+        "description": "Currently supports Smart-1-110 split air conditioners only.",
+        "data": {
+          "device_ids": "Devices"
+        }
+      },
+      "eu_reauth": {
+        "title": "Sign in to HiSmart Life Europe again",
+        "description": "Enter credentials locally. Only access and refresh tokens are saved.",
+        "data": {
+          "username": "Email",
+          "password": "Password"
+        }
       }
     },
     "error": {
@@ -32,9 +48,16 @@
       "no_devices": "No supported Hisense devices were found",
       "no_homes": "No homes were found for this account",
       "wrong_account": "This account does not contain the configured devices",
-      "unknown": "An unknown error occurred"
+      "unknown": "An unknown error occurred",
+      "eu_unsupported_profile": "No Smart-1-110 device was found in this European account.",
+      "eu_account_mismatch": "This account does not contain the configured European devices."
     },
-    "title": "Hisense Smart Device"
+    "title": "Hisense Smart Device",
+    "abort": {
+      "eu_reauth_only": "This reauthentication flow supports European entries only.",
+      "reauth_successful": "Reauthentication successful.",
+      "already_configured": "This account is already configured."
+    }
   },
   "device": {
     "hisense_ac": {
@@ -131,6 +154,9 @@
       }
     },
     "sensor": {
+      "room_temperature": {
+        "name": "Current room temperature"
+      },
       "fridge_refrigerator_temperature": {
         "name": "Temperature - Refrigerator (actual)"
       },

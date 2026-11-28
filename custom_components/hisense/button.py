@@ -11,6 +11,10 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     coordinators = hass.data[DOMAIN][config_entry.entry_id]
+    if config_entry.data.get("region") == "EU":
+        from .eu_entities import EuropeanRefresh
+        async_add_entities([EuropeanRefresh(c) for c in coordinators.values()])
+        return
     entities = [HisenseACUpdateButton(coordinator) for coordinator in coordinators.values()]
     async_add_entities(entities)
 

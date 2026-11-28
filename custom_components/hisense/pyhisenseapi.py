@@ -4,11 +4,14 @@ from collections import Counter
 import hashlib
 import json
 import logging
+import math
 import time
 import uuid
 
+from aiohttp import ClientError
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
+from .const import ROOM_CONTROLLER_MODEL, ROOM_CONTROLLER_TYPE
 from .fridge_const import (
     DBD_DEGERMING,
     FREEZE_SET_TEMP_MAX,
@@ -242,11 +245,18 @@ class HiSenseLogin:
                 or product.get("name")
                 or ""
             ).strip()
+            nickname = None
+            if device_type == ROOM_CONTROLLER_TYPE:
+                nickname = str(device.get("nickname") or "").strip()
+                device_name = nickname or device_name
+            wifi_id = device.get("wifiId")
+            if not wifi_id and device_type == "热水器":
+                wifi_id = device.get("comModuleId")
             label = device_name or device_id
             raw_labels[device_id] = label
             devices[device_id] = {
                 "device_id": device_id,
-                "wifi_id": str(device.get("wifiId") or device.get("comModuleId") or ""),
+                "wifi_id": str(wifi_id or ""),
                 "home_id": str(home_id),
                 "refresh_token": refresh_token,
                 "access_token": str(access_token),
@@ -261,15 +271,26 @@ class HiSenseLogin:
                 ),
                 "device_name": device_name,
                 "device_code": str(
-                    device.get("deviceCode") or product.get("code") or ""
+                    device.get("deviceCode")
+                    or product.get("code")
+                    or (ROOM_CONTROLLER_MODEL if device_type == ROOM_CONTROLLER_TYPE else "")
                 ),
                 "label": label,
             }
 
+            if nickname is not None:
+                devices[device_id]["nickname"] = nickname
+
         counts = Counter(raw_labels.values())
         for device_id, label in raw_labels.items():
             if counts[label] > 1:
-                devices[device_id]["label"] = f"{label} ({device_id[-6:]})"
+                device = devices[device_id]
+                suffix = (
+                    device_id
+                    if device["device_type"] == ROOM_CONTROLLER_TYPE
+                    else device_id[-6:]
+                )
+                device["label"] = f"{label} ({suffix})"
         return devices
 
     async def get_device_wifi_id_and_labels(
@@ -316,6 +337,11 @@ def _device_type_from_name(device_type_name) -> str | None:
 
 def _device_type(device: dict) -> str | None:
     product = device.get("product") or {}
+    if (
+        device.get("categoryCode") == "connector.device.type.watersystem.central"
+        and ROOM_CONTROLLER_MODEL in (product.get("code"), device.get("productCode"))
+    ):
+        return ROOM_CONTROLLER_TYPE
     device_type = _device_type_from_name(
         " ".join(
             str(value or "")
@@ -1436,6 +1462,30 @@ class HiSenseAC(_HiSenseDevice):
         return await self.refresh_energy()
 
 
+class HiSenseRoomController(_HiSenseDevice):
+    """Read ambient temperature from the central-system room controller."""
+
+    def _update_from_states(self, states: dict) -> set[str]:
+        updated = super()._update_from_states(states)
+        temperature = None
+        for key in (
+            "realTemperature",
+            "indoorTemperature",
+            "roomTemperature",
+            "currentTemperature",
+        ):
+            raw_value = states.get(key)
+            if isinstance(raw_value, bool):
+                continue
+            value = _as_number(raw_value)
+            if value is not None and math.isfinite(value):
+                temperature = value
+                break
+
+        self.status["indoor_temperature"] = temperature
+        return updated | {"indoor_temperature"}
+
+
 class HiSenseFridge(_HiSenseDevice):
     """Hisense AIHome refrigerator: named-state reads and control commands.
 
@@ -1777,47 +1827,27 @@ class HiSenseFridge(_HiSenseDevice):
             return lower
         return max(lower, min(upper, number))
 
+
 class HiSenseWaterHeater(_HiSenseDevice):
-    """Hisense Water Heater API client."""
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        
-        # 双保险：如果没拿到 wifi_id，直接从 device_id 里截取冒号前面的部分
-        if not self.wifi_id and ":" in self.device_id:
-            self.wifi_id = self.device_id.split(":")[0]
-            
-        # 老接口需要不带 MAC 前缀的短 deviceId (抓包里的 serialNumber)
-        self.short_device_id = self.device_id.split(":")[-1] if ":" in self.device_id else self.device_id
-        # 调温老接口的 URL
-        self.REMOTE_LOGIC_URL = "https://api-wg.hismarttv.com/agw/dsg/outer/uploadRemoteLogicCmd"
+    """AIHome storage water heater."""
 
-    def _update_from_states(self, states: dict):
-        updates = {}
-        if "onlineStatus" in states:
-            updates["online"] = _as_bool(states["onlineStatus"])
-        if "powerStatus" in states:
-            updates["power_on"] = _as_bool(states["powerStatus"])
-        if "realWaterTemperature" in states:
-            updates["current_temperature"] = _as_number(states["realWaterTemperature"])
-        if "setWaterTemperature" in states:
-            updates["target_temperature"] = _as_number(states["setWaterTemperature"])
-        if "workMode" in states:
-            updates["work_mode"] = _as_int(states["workMode"])
+    MIN_TEMPERATURE = 30
+    MAX_TEMPERATURE = 75
+    REMOTE_LOGIC_URL = "https://api-wg.hismarttv.com/agw/dsg/outer/uploadRemoteLogicCmd"
 
-        if "heatStatus" in states:
-            updates["heat_status"] = _as_int(states["heatStatus"])
-        if "heatFinishedStatus" in states:
-            updates["heat_finished"] = _as_int(states["heatFinishedStatus"])
-
-        # 故障码解析
-        fault_codes = {}
-        for key, value in states.items():
-            if key.startswith("fault.") and value not in ("--", "0"):
-                fault_codes[key] = value
-        
+    def _update_from_states(self, states: dict) -> set[str]:
+        fields = {
+            "powerStatus": ("power_on", _as_bool),
+            "realWaterTemperature": ("current_temperature", _as_number),
+            "setWaterTemperature": ("target_temperature", _as_number),
+            "workMode": ("work_mode", _as_int),
+        }
+        updates = {
+            key: convert(states[field])
+            for field, (key, convert) in fields.items()
+            if field in states
+        }
         self.status.update(updates)
-        self.status["faults"] = fault_codes
         return set(updates)
 
     async def turn_on(self):
@@ -1833,57 +1863,25 @@ class HiSenseWaterHeater(_HiSenseDevice):
         )
 
     async def set_temperature(self, temperature):
-        if not await self.refresh():
+        if not self.MIN_TEMPERATURE <= temperature <= self.MAX_TEMPERATURE:
             return False
-            
-        params = {
-            "format": "1", "nouncestr": uuid.uuid4().hex,
-            "timeStamp": int(time.time()), "timezone": "28800",
-            "version": "8.0", "accessToken": self.access_token,
-            "sourceType": "1", "appType": "0",
-            "languageId": "0", "signVersion": "0",
-        }
-        payload = {
-            "cmdList": [{"cmdOrder": 1, "cmdId": 5, "cmdParm": int(temperature)}],
-            "wifiId": self.wifi_id, "deviceId": self.short_device_id,
-            "homeId": self.home_id, "cmdVersion": 1,
-            "extendParm": "", "accessToken": self.access_token,
-            "customerId": self.customer_id
-        }
-        
-        headers = {
-            "Content-Type": "application/json;charset=UTF-8", 
-            "User-Agent": "okhttp/3.12.13-1.1",
-            "Accept": "application/json"
-        }
-        
-        body_str = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
-        
-        try:
-            async with self.session.post(
-                self.REMOTE_LOGIC_URL, 
-                params=params, 
-                headers=headers, 
-                data=body_str
-            ) as response:
-                result = await response.json()
-                if response.status == 200:
-                    res_code = str(result.get("response", {}).get("resultCode", ""))
-                    desc = str(result.get("response", {}).get("desc", ""))
-                    if res_code in ("0", "4") or not desc:
-                        self._set_pending_status({"target_temperature": int(temperature)})
-                        return True
-                        
-                _LOGGER.error("❌ 调温失败，云端返回: %s", result)
-                return False
-        except Exception as e:
-            _LOGGER.error("Hisense Water Heater set temp error: %s", e)
+        temperature = round(temperature)
+        if not await self._send_remote_logic_command(5, temperature):
             return False
+        self._set_pending_status({"target_temperature": temperature})
+        return True
 
     async def set_mode(self, mode_id):
-        if not await self.refresh():
+        if not await self._send_remote_logic_command(4, mode_id):
             return False
-            
+        self._set_pending_status({"work_mode": mode_id})
+        return True
+
+    async def _send_remote_logic_command(self, command_id, value):
+        device_prefix, separator, device_suffix = self.device_id.rpartition(":")
+        wifi_id = self.wifi_id or device_prefix
+        if not wifi_id or not await self.refresh():
+            return False
         params = {
             "format": "1", "nouncestr": uuid.uuid4().hex,
             "timeStamp": int(time.time()), "timezone": "28800",
@@ -1892,38 +1890,27 @@ class HiSenseWaterHeater(_HiSenseDevice):
             "languageId": "0", "signVersion": "0",
         }
         payload = {
-            "cmdList": [{"cmdOrder": 1, "cmdId": 4, "cmdParm": int(mode_id)}],
-            "wifiId": self.wifi_id, "deviceId": self.short_device_id,
+            "cmdList": [{"cmdOrder": 1, "cmdId": command_id, "cmdParm": value}],
+            "wifiId": wifi_id,
+            "deviceId": device_suffix if separator else self.device_id,
             "homeId": self.home_id, "cmdVersion": 1,
             "extendParm": "", "accessToken": self.access_token,
-            "customerId": self.customer_id
+            "customerId": self.customer_id,
         }
-        
         headers = {
             "Content-Type": "application/json;charset=UTF-8",
             "User-Agent": "okhttp/3.12.13-1.1",
-            "Accept": "application/json"
+            "Accept": "application/json",
         }
-        
-        body_str = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
-        
         try:
             async with self.session.post(
-                self.REMOTE_LOGIC_URL, 
-                params=params, 
-                headers=headers, 
-                data=body_str
+                self.REMOTE_LOGIC_URL, params=params, headers=headers,
+                data=json.dumps(payload, separators=(",", ":"), ensure_ascii=False),
             ) as response:
+                if response.status != 200:
+                    return False
                 result = await response.json()
-                if response.status == 200:
-                    res_code = str(result.get("response", {}).get("resultCode", ""))
-                    desc = str(result.get("response", {}).get("desc", ""))
-                    if res_code in ("0", "4") or not desc:
-                        self._set_pending_status({"work_mode": int(mode_id)})
-                        return True
-                        
-                _LOGGER.error("❌ 切模式失败，云端返回: %s", result)
-                return False
-        except Exception as e:
-            _LOGGER.error("Hisense Water Heater set mode error: %s", e)
+        except (ClientError, TimeoutError, ValueError):
             return False
+        reply = result.get("response") if isinstance(result, dict) else None
+        return isinstance(reply, dict) and str(reply.get("resultCode")) == "0"

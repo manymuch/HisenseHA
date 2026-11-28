@@ -1,5 +1,7 @@
 """Constants for HiSense Integration."""
 DOMAIN = "hisense"
+ROOM_CONTROLLER_TYPE = "室温线控器"
+ROOM_CONTROLLER_MODEL = "hitachiRoomTemperatureController"
 
 # Configuration keys
 CONF_USERNAME = "username"

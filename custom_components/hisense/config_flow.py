@@ -3,10 +3,13 @@ from homeassistant import config_entries
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.selector import TextSelector, TextSelectorConfig, TextSelectorType
-from .const import DOMAIN, CONF_USERNAME, CONF_PASSWORD
+from .const import DOMAIN, CONF_USERNAME, CONF_PASSWORD, ROOM_CONTROLLER_TYPE
 from .pyhisenseapi import HiSenseLogin
 
-class HisenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+from .eu_flow import EuropeanFlow
+
+
+class HisenseConfigFlow(EuropeanFlow, config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
     CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
 
@@ -21,6 +24,8 @@ class HisenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._reauth_username = ""
 
     async def async_step_user(self, user_input=None):
+        if user_input is not None and user_input.get("region") == "EU":
+            return await self.async_step_eu_user(user_input)
         errors = {}
 
         if user_input is not None:
@@ -61,6 +66,7 @@ class HisenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=vol.Schema(
                 {
+                    vol.Required("region", default="CN"): vol.In({"CN": "China (HisenseHA)", "EU": "Europe (HiSmart Life / Ayla)"}),
                     vol.Required(CONF_USERNAME): str,
                     vol.Required(CONF_PASSWORD): TextSelector(
                         TextSelectorConfig(type=TextSelectorType.PASSWORD)
@@ -131,7 +137,9 @@ class HisenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         for device_id, info in self._device_info.items():
             label = info.get("label", device_id)
             device_type = info.get("device_type", "")
-            device_id_to_label[device_id] = f"{label} ({device_type})"
+            device_id_to_label[device_id] = (
+                label if device_type == ROOM_CONTROLLER_TYPE else f"{label} ({device_type})"
+            )
 
         data_schema = vol.Schema(
             {
@@ -145,6 +153,8 @@ class HisenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_reauth(self, entry_data):
+        if entry_data.get("region") == "EU":
+            return await super().async_step_reauth(entry_data)
         """Collect credentials for an existing token-only entry."""
         self._reauth_username = entry_data.get(CONF_USERNAME, "")
         return await self.async_step_reauth_confirm()
